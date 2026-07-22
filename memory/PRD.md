@@ -10,50 +10,47 @@ seeded demo data. Workflow: lead → quote → job → dispatch → crew → inv
 - **Frontend**: Next.js 15 App Router + TypeScript + Tailwind, at `/app/frontend`.
   Runs on port 3000 (`yarn start` → `next dev`). Production build via `yarn build`.
 - **Backend**: Existing Supabase (Postgres + RLS + Edge Functions + Storage). Not modified.
-- **Data layer**: `mvp-dashboard` (public) powers pre-auth demo screens via a defensive
-  normalizer (`src/lib/normalize.ts`) tolerant to payload shape. Auth via Supabase
-  email/password + `/functions/v1/me` bootstrap + `create_owner_profile_for_current_user` RPC.
-- **Env**: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (anon only,
-  never service-role).
+- **Data layer**: `/dashboard` layout and `/mobile/jobs` are SERVER components
+  (`force-dynamic`) that fetch the public `mvp-dashboard` Edge Function on the server
+  and seed a client `DashboardProvider` (avoids client-fetch/hydration issues; renders
+  real data in first paint). Defensive normalizer (`src/lib/normalize.ts`) + entity
+  accessors (`src/lib/entities.ts`) map the live payload (nested `customers` object,
+  `estimated_volume_cuft`, dispatch assignments embedding `jobs`/`trucks`).
+- **Auth (built, not yet exercised)**: Supabase email/password + `/functions/v1/me`
+  bootstrap + `create_owner_profile_for_current_user` RPC + role redirects.
+- **Env**: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (anon only).
 
-## User Personas
-- Owner / Operations Manager → /dashboard
-- Dispatcher → /dashboard/dispatch
-- Sales → /dashboard/leads
-- Crew Lead / Mover → /mobile/jobs
-- Customer → /portal
+## Live payload shape (confirmed 2026-07-22)
+Root keys: company{id,name,city,state,timezone}, counts{customers,leads,quotes,jobs,
+dispatch_assignments,trucks}, leads[], quotes[], jobs[], dispatch[], (no top-level
+trucks[] or onboarding[]). Customer joined under `customers` (plural). Lead statuses:
+new, contacted, qualified, quoted, booked.
 
-## Implemented (2026-06 / takeover build)
-- Replaced legacy CRA scaffold with fresh Next.js App Router + TS project.
-- Design system per design_guidelines.json: navy sidebar, slate/white surfaces,
-  restrained blue accent, Chivo + IBM Plex fonts, compact tables, status badges.
-- App shell: collapsible sidebar, topbar (search, notifications, user menu),
-  breadcrumbs, mobile drawer nav.
-- Reusable UI: StatusBadge, Button, Input/Select, Skeletons, EmptyState, ErrorState,
-  ConfirmDialog, Drawer, Card/StatCard, DataTable, Toast, PageHeader.
-- Auth: AuthProvider (session, /me bootstrap, owner-profile RPC, role redirects),
-  /login (login+signup), /forgot-password, /unauthorized.
-- Staff pages: Dashboard (KPIs, recent leads/quotes, upcoming jobs, onboarding),
-  Leads (search/filters/table/mobile cards/detail drawer), Customers, Quotes
-  (pricing fields + line items + send/approve/convert actions), Jobs (status
-  timeline), Dispatch (day-board list), Invoices, Reports, Settings (health check).
-- Customer portal routes (structured placeholders) + Crew mobile (jobs/clock/photos/checklists).
-- Production build passes (25 routes). All routes return 200.
-
-## KNOWN BLOCKER (action required)
-- Supabase project `yrvgovkkukmtdmgejtxc.supabase.co` returns **NXDOMAIN** from public
-  DNS (Google + Cloudflare) → project is **paused or deleted**. Live seeded data cannot
-  load until the user restores the project in the Supabase dashboard.
-- Frontend handles this gracefully with visible error/retry states.
+## Implemented & VERIFIED (testing agent iteration_1 = 100% frontend pass)
+- Fresh Next.js App Router + TS project (replaced legacy CRA scaffold).
+- App shell (navy sidebar, topbar, breadcrumbs, mobile drawer), reusable UI kit.
+- Dashboard renders real seeded data: counts 5/5/2/1/1/3, recent leads/quotes,
+  upcoming job JOB-DEMO-001, onboarding (empty → "Setup complete").
+- Leads (table + search + filters + mobile cards + detail drawer), Customers,
+  Quotes (total + dates + actions), Jobs (status timeline), Dispatch (day-board with
+  embedded truck/job, assigned run, fleet derived from payload), Invoices, Reports, Settings.
+- Auth pages (/login, /forgot-password, /unauthorized) render with validation.
+- Portal + Crew mobile routes present; production build passes (25 routes).
 
 ## Backlog / Next
-- P0: Restore Supabase project → verify mvp-dashboard shape, align normalizer to real
-  keys, confirm seeded data renders across Dashboard/Leads/Quotes/Jobs/Dispatch.
-- P0: Run testing agent end-to-end once backend is live.
-- P1: Real auth verification (create test user), protected-route middleware,
-  role-based redirects live test.
-- P1: Wire quote actions to generate-quote-estimate / approve-quote; dispatch to
-  assign-dispatch; direct table reads (authed) on list pages instead of mvp-dashboard.
-- P2: Invoices/payments (create-deposit-payment, mark-payment-paid), portal (RLS),
-  crew mobile edge-function wiring (clock-in/out, register-job-photo), Stripe, reports,
-  drag-and-drop dispatch.
+- P0: Create first owner auth user; verify login → /me → owner-profile RPC → role redirect.
+- P0: Replace public-demo list reads with authenticated Supabase/RLS table reads
+  (keep mvp-dashboard as fallback only). Add protected-route middleware.
+- P1: Wire actions to Edge Functions — public-lead-intake (New Lead),
+  generate-quote-estimate/approve-quote (Quotes), assign-dispatch (Dispatch).
+- P1: Customer portal (RLS-scoped) + crew mobile edge-fn wiring (clock-in/out,
+  register-job-photo, crew-job-status-update).
+- P2: Invoices/payments (create-deposit-payment, mark-payment-paid), Stripe,
+  advanced reports, drag-and-drop dispatch, forgot-password split-screen polish.
+
+## Known notes
+- Some action buttons are intentional placeholders (toast only) until Edge Functions
+  are wired: New Lead, Create Quote/Add Note, quote Send/Approve/Convert, dispatch assign,
+  mobile clock/photos. These are MOCKED for milestone 1.
+- Supabase free-tier auto-pauses on inactivity → if the app can't reach the backend,
+  restore the project from the Supabase dashboard.

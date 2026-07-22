@@ -36,7 +36,7 @@ export default function DispatchPage() {
 
   const assignments = data?.dispatchAssignments ?? [];
   const jobs = data?.upcomingJobs ?? [];
-  const fleet = data?.trucks ?? [];
+  const topFleet = data?.trucks ?? [];
 
   // Assignments embed the job/truck. Match to the full job (with addresses) by number.
   const assignedJobNumbers = useMemo(
@@ -57,6 +57,18 @@ export default function DispatchPage() {
     const num = jobNumberOf(embeddedJob(a));
     return jobs.find((j) => j.job_number === num);
   }
+
+  // No top-level trucks array in the public payload — derive from embedded trucks.
+  const fleet = useMemo(() => {
+    if (topFleet.length > 0) return topFleet;
+    const map = new Map<string, AnyObj>();
+    assignments.forEach((a) => {
+      const t = embeddedTruck(a);
+      const key = (t?.name || t?.license_plate) as string | undefined;
+      if (t && key && !map.has(key)) map.set(key, t);
+    });
+    return Array.from(map.values());
+  }, [topFleet, assignments]);
 
   return (
     <div>
