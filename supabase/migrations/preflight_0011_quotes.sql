@@ -1,20 +1,19 @@
 -- =====================================================================
 -- preflight_0011_quotes.sql  (READ-ONLY — no writes, no DDL)
--- Phase 4 (Quotes) comprehensive schema inspection.
--- Returns ONE pretty-printed JSON blob. Run in Supabase SQL Editor and
--- paste the single result back.
+-- Phase 4 (Quotes) comprehensive schema inspection. Returns ONE
+-- pretty-printed JSON blob. Run in Supabase SQL Editor and paste the
+-- single result back.
 --
--- Scope: any table matching %quote% / %approval% / %activity%, plus jobs
--- and job_crew; all public enums; constraints/FKs; indexes; RLS state;
--- policies; table + (quote-only) column grants; triggers; quote/total/
--- convert/number-related functions (full definitions, security mode,
--- search_path, ACL); and safe row counts + quote status distribution.
--- No customer PII is selected.
+-- Revision: every jsonb_agg wrapped in coalesce(..., '[]'::jsonb) so
+-- missing optional tables/functions yield [] not null. Direct row counts
+-- kept ONLY for confirmed tables (quotes, jobs); everything else is
+-- discovered via pg_stat_user_tables (no reference to possibly-missing
+-- relations). No customer PII selected.
 -- =====================================================================
 
 select jsonb_pretty(jsonb_build_object(
 
-  'columns', (
+  'columns', coalesce((
     select jsonb_agg(jsonb_build_object(
       'table', c.table_name, 'ordinal', c.ordinal_position,
       'column', c.column_name, 'data_type', c.data_type,
@@ -25,9 +24,9 @@ select jsonb_pretty(jsonb_build_object(
     where c.table_schema = 'public'
       and (c.table_name like '%quote%' or c.table_name in ('jobs','job_crew')
            or c.table_name like '%approval%' or c.table_name like '%activity%')
-  ),
+  ), '[]'::jsonb),
 
-  'enums', (
+  'enums', coalesce((
     select jsonb_agg(jsonb_build_object('enum', s.typname, 'labels', s.labels) order by s.typname)
     from (
       select tp.typname, jsonb_agg(e.enumlabel order by e.enumsortorder) as labels
@@ -37,9 +36,9 @@ select jsonb_pretty(jsonb_build_object(
       where n.nspname = 'public'
       group by tp.typname
     ) s
-  ),
+  ), '[]'::jsonb),
 
-  'constraints', (
+  'constraints', coalesce((
     select jsonb_agg(jsonb_build_object(
       'table', rel.relname, 'name', con.conname, 'type', con.contype,
       'definition', pg_get_constraintdef(con.oid)
@@ -50,18 +49,18 @@ select jsonb_pretty(jsonb_build_object(
     where n.nspname = 'public'
       and (rel.relname like '%quote%' or rel.relname in ('jobs','job_crew')
            or rel.relname like '%approval%' or rel.relname like '%activity%')
-  ),
+  ), '[]'::jsonb),
 
-  'indexes', (
+  'indexes', coalesce((
     select jsonb_agg(jsonb_build_object('table', tablename, 'name', indexname, 'def', indexdef)
                      order by tablename, indexname)
     from pg_indexes
     where schemaname = 'public'
       and (tablename like '%quote%' or tablename in ('jobs','job_crew')
            or tablename like '%approval%' or tablename like '%activity%')
-  ),
+  ), '[]'::jsonb),
 
-  'rls', (
+  'rls', coalesce((
     select jsonb_agg(jsonb_build_object(
       'table', rel.relname, 'rls_enabled', rel.relrowsecurity, 'rls_forced', rel.relforcerowsecurity
     ) order by rel.relname)
@@ -70,9 +69,9 @@ select jsonb_pretty(jsonb_build_object(
     where n.nspname = 'public' and rel.relkind = 'r'
       and (rel.relname like '%quote%' or rel.relname in ('jobs','job_crew')
            or rel.relname like '%approval%' or rel.relname like '%activity%')
-  ),
+  ), '[]'::jsonb),
 
-  'policies', (
+  'policies', coalesce((
     select jsonb_agg(jsonb_build_object(
       'table', tablename, 'policy', policyname, 'permissive', permissive,
       'roles', roles, 'cmd', cmd, 'using', qual, 'with_check', with_check
@@ -81,9 +80,9 @@ select jsonb_pretty(jsonb_build_object(
     where schemaname = 'public'
       and (tablename like '%quote%' or tablename in ('jobs','job_crew')
            or tablename like '%approval%' or tablename like '%activity%')
-  ),
+  ), '[]'::jsonb),
 
-  'table_grants', (
+  'table_grants', coalesce((
     select jsonb_agg(jsonb_build_object(
       'table', table_name, 'grantee', grantee, 'privilege', privilege_type
     ) order by table_name, grantee, privilege_type)
@@ -91,18 +90,18 @@ select jsonb_pretty(jsonb_build_object(
     where table_schema = 'public'
       and (table_name like '%quote%' or table_name in ('jobs','job_crew')
            or table_name like '%approval%' or table_name like '%activity%')
-  ),
+  ), '[]'::jsonb),
 
-  'column_grants_quote_tables', (
+  'column_grants_quote_tables', coalesce((
     select jsonb_agg(jsonb_build_object(
       'table', table_name, 'column', column_name, 'grantee', grantee, 'privilege', privilege_type
     ) order by table_name, column_name, grantee)
     from information_schema.role_column_grants
     where table_schema = 'public'
       and table_name like '%quote%'
-  ),
+  ), '[]'::jsonb),
 
-  'triggers', (
+  'triggers', coalesce((
     select jsonb_agg(jsonb_build_object(
       'table', rel.relname, 'name', tg.tgname, 'def', pg_get_triggerdef(tg.oid)
     ) order by rel.relname, tg.tgname)
@@ -112,9 +111,9 @@ select jsonb_pretty(jsonb_build_object(
     where n.nspname = 'public' and not tg.tgisinternal
       and (rel.relname like '%quote%' or rel.relname in ('jobs','job_crew')
            or rel.relname like '%approval%' or rel.relname like '%activity%')
-  ),
+  ), '[]'::jsonb),
 
-  'functions', (
+  'functions', coalesce((
     select jsonb_agg(jsonb_build_object(
       'name', p.proname,
       'args', pg_get_function_arguments(p.oid),
@@ -130,17 +129,26 @@ select jsonb_pretty(jsonb_build_object(
       and (p.proname like '%quote%' or p.proname like '%total%'
            or p.proname like '%recalc%' or p.proname like '%convert%'
            or p.proname like '%number%' or p.proname like '%approve%')
-  ),
+  ), '[]'::jsonb),
 
-  'row_counts', jsonb_build_object(
+  'table_inventory', coalesce((
+    select jsonb_agg(jsonb_build_object(
+      'table', s.relname, 'estimated_rows', s.n_live_tup
+    ) order by s.relname)
+    from pg_stat_user_tables s
+    where s.schemaname = 'public'
+      and (s.relname like '%quote%' or s.relname in ('jobs','job_crew')
+           or s.relname like '%approval%' or s.relname like '%activity%')
+  ), '[]'::jsonb),
+
+  'confirmed_row_counts', jsonb_build_object(
     'quotes', (select count(*) from public.quotes),
-    'quote_line_items', (select count(*) from public.quote_line_items),
     'jobs', (select count(*) from public.jobs)
   ),
 
-  'quote_status_distribution', (
+  'quote_status_distribution', coalesce((
     select jsonb_agg(jsonb_build_object('status', s.status, 'count', s.c) order by s.status)
     from (select status::text as status, count(*) c from public.quotes group by status) s
-  )
+  ), '[]'::jsonb)
 
 )) as quotes_preflight;
