@@ -77,3 +77,52 @@ new, contacted, qualified, quoted, booked.
 - NEXT: after auth live — wire Leads/Quotes/Jobs/Dispatch create/edit to authenticated
   Supabase writes (Phases 3-5), crew mobile clock/photos (6), portal (7), invoices (9),
   activity logging (10), invoice PDF (8b).
+
+## Production hardening — Phases 0-3 (2026-07, APPLIED & VERIFIED)
+User applied all SQL manually in Supabase SQL Editor (agent has anon key only) and
+returned read-only verification JSON for each. All verified.
+
+- **Phase 0 security lockdown (0001_security_lockdown.sql):** revoked browser EXECUTE on
+  create_owner_profile_for_current_user; stripped profiles grants to SELECT + column
+  UPDATE(full_name,phone,avatar_url) only; added SECURITY DEFINER auth.users signup
+  trigger handle_new_auth_user (role=customer, company_id NULL, is_active true, no
+  metadata trust); added admin_set_profile_role RPC (owner/ops-manager, same-company,
+  no self-change, ops-manager can't touch owner); granted has_company_role/
+  is_company_member EXECUTE to authenticated. Frontend: removed the unsafe RPC call in
+  AuthProvider.tsx.
+- **Phase 1 business_profile (0002):** per-company table, UNIQUE(company_id), RLS
+  (SELECT is_company_member, INSERT/UPDATE can_manage_company), no DELETE, trigger-only
+  updated_at fn, anon/public stripped. Settings page loads/saves by me.profile.company_id.
+  Owner load/save tested manually — WORKS.
+- **Phase 2 owner (0004_owner_role.sql):** owner smagnoliamoving@gmail.com promoted,
+  company f05941f2-13db-4779-a1f3-2d6a74ccffcd. Public signup OFF.
+- **Phase 3 Leads/Customers/Notes (0006, 0007, 0008):**
+  - 0006: grant hardening (leads/customers -> authenticated INSERT/SELECT/UPDATE only,
+    anon/public none) + staff-only RLS. leads SELECT/INSERT/UPDATE = has_company_role
+    {owner,operations_manager,dispatcher,sales}. customers SELECT
+    {owner,operations_manager,dispatcher,sales}, INSERT/UPDATE {owner,operations_manager,
+    sales}. Dropped weak customers_customer_self_select; current_customer_id non-executable
+    by clients (portal will use a verified mapping later). RLS force-enabled.
+  - 0007 + 0008: append-only public.lead_notes (company_id/lead_id/author_id/body/
+    created_at), RLS staff read + insert (insert binds company_id to the lead's company +
+    author_id=auth.uid()), authenticated INSERT/SELECT only (0008 stripped the Supabase
+    default-privilege ALL grant). Indexes (lead_id,created_at desc)+(company_id).
+  - Frontend: src/lib/leads.ts, customers.ts, leadNotes.ts (authenticated, company-scoped).
+    Leads page: DB list + New Lead form + status dropdown (6 lead_status enum values) +
+    append-only notes panel. Customers page: DB list + New/Edit forms.
+  - VERIFIED via testing_agent iteration_3 (15/15) with throwaway qa-owner account.
+- **Login bug fix (2026-07):** login/page.tsx password minLength now applies in signup
+  mode only (was unconditional 6, blocked short legacy passwords). Verified iteration_4 (4/4).
+
+## KNOWN LIMITATIONS / BACKLOG (post-Phase 3)
+- **P1 orphan risk:** New Lead does TWO client writes (createCustomer then createLead);
+  not transactional. Draft fix authored (0009_create_lead_with_customer.sql — atomic
+  SECURITY DEFINER RPC) but NOT yet applied; frontend still uses the two-write path.
+- **Deferred:** customer-role RLS permission test ("implemented but not fully verified").
+  test-customer@example.com attached to company for that test (customer role).
+- **Next phases:** 4 Quotes, 5 Jobs/Dispatch, 6 Crew mobile, 7 Portal (verified
+  user<->customer mapping via profiles.customer_id FK or customer_user_links, NOT
+  email+LIMIT 1), 8 PDFs, 9 Invoices, 10 activity logging (wire admin_set_profile_role +
+  lead actions).
+- **Credentials:** owner password NOT stored anywhere (user policy). qa-owner throwaway
+  account (role owner) used only for automated testing — user to delete after.
