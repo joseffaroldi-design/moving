@@ -42,13 +42,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const bootstrap = useCallback(
     async (accessToken: string): Promise<MeResponse | null> => {
       try {
-        let meRes = await getMe(accessToken);
-        const needsProfile =
-          meRes.needs_profile === true || meRes.needsProfile === true;
-        if (needsProfile) {
-          await supabase.rpc("create_owner_profile_for_current_user");
-          meRes = await getMe(accessToken);
-        }
+        // Profiles are provisioned by the auth.users signup trigger
+        // (0001_security_lockdown.sql), NOT by any client-callable RPC.
+        const meRes = await getMe(accessToken);
         setMe(meRes);
         return meRes;
       } catch (e) {
@@ -57,7 +53,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return null;
       }
     },
-    [supabase]
+    []
   );
 
   useEffect(() => {
