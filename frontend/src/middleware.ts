@@ -35,7 +35,13 @@ export async function middleware(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("next", path);
-    return NextResponse.redirect(url);
+    const redirect = NextResponse.redirect(url);
+    // Carry over any auth cookies Supabase refreshed while validating, so a
+    // token refresh during a protected request cannot cause a redirect loop.
+    response.cookies.getAll().forEach((c) =>
+      redirect.cookies.set(c.name, c.value, c)
+    );
+    return redirect;
   }
 
   return response;
