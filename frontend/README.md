@@ -1,70 +1,86 @@
-# Getting Started with Create React App
+# MoveOps — Moving Company Operations Platform
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+MoveOps is a unified operations platform for moving companies covering the full
+workflow: **lead → quote → job → dispatch → crew → invoice/payment**.
 
-## Available Scripts
+Built with **Next.js (App Router) + TypeScript + Tailwind CSS**, connected to an
+existing **Supabase** backend (Postgres, RLS, Edge Functions, Storage).
 
-In the project directory, you can run:
+## Tech Stack
 
-### `npm start`
+- Next.js 15 (App Router, Server + Client Components)
+- TypeScript, Tailwind CSS, Lucide icons
+- Supabase JS client + `@supabase/ssr`
+- Zod + React Hook Form (forms/validation)
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+## Local Setup
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+```bash
+cd frontend
+yarn install
+yarn dev      # http://localhost:3000
+```
 
-### `npm test`
+Production build:
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+```bash
+yarn build
+yarn start:prod
+```
 
-### `npm run build`
+## Environment Variables
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+Set in `frontend/.env` (never commit secrets, never expose the service-role key):
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+```
+NEXT_PUBLIC_SUPABASE_URL=https://yrvgovkkukmtdmgejtxc.supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<publishable anon key>
+```
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+Only the **publishable (anon)** key is used in the browser. RLS enforces company
+isolation and role-based access on the backend.
 
-### `npm run eject`
+## Backend (Supabase — do not modify from the frontend)
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+- Public demo endpoint: `/functions/v1/mvp-dashboard`
+- Authenticated bootstrap: `/functions/v1/me`
+- Health: `/functions/v1/app-health`
+- Onboarding RPC: `create_owner_profile_for_current_user`
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+> If the app shows "Unable to reach the MoveOps backend", the Supabase project is
+> likely **paused**. Restore it from the Supabase dashboard (Project → Restore).
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+## Routes
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+| Area | Routes |
+|------|--------|
+| Public | `/`, `/login`, `/forgot-password`, `/unauthorized` |
+| Staff | `/dashboard`, `/dashboard/{leads,customers,quotes,jobs,dispatch,invoices,reports,settings}` |
+| Customer Portal | `/portal`, `/portal/{quotes,payments,documents}` |
+| Crew Mobile | `/mobile`, `/mobile/{jobs,clock,photos,checklists}` |
 
-## Learn More
+## Architecture
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+```
+src/
+  app/                 # App Router routes (route groups per role)
+  components/
+    auth/              # AuthProvider (Supabase session + /me bootstrap)
+    data/              # DashboardProvider (mvp-dashboard data context)
+    shell/             # AppShell: sidebar, topbar, mobile nav
+    ui/                # Reusable: table, badge, drawer, dialog, empty/error states
+  lib/
+    supabase/          # browser + server clients, config
+    api.ts             # Edge Function calls
+    normalize.ts       # Defensive mvp-dashboard payload normalizer
+    format.ts          # Currency/date/phone formatters
+    status.ts          # Status → badge tone mapping
+    entities.ts        # Defensive entity display accessors
+    nav.ts             # Role-aware navigation + role redirects
+```
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+## Data & Security
 
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+- RLS is preserved; the frontend never uses the service-role key.
+- Authenticated Edge Functions are called with the user JWT.
+- The public `mvp-dashboard` endpoint powers the pre-auth demo screens.
