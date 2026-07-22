@@ -2,7 +2,8 @@
 
 import { AppShell } from "@/components/shell/AppShell";
 import { DashboardProvider } from "@/components/data/DashboardProvider";
-import { STAFF_NAV } from "@/lib/nav";
+import { allowedStaffNav } from "@/lib/nav";
+import { useAuth } from "@/components/auth/AuthProvider";
 import type { NormalizedDashboard } from "@/lib/types";
 
 export function DashboardShell({
@@ -14,9 +15,11 @@ export function DashboardShell({
   initialData: NormalizedDashboard | null;
   initialError: string | null;
 }) {
+  const { role } = useAuth();
+  const nav = allowedStaffNav(role as string | null);
   return (
     <DashboardProvider initialData={initialData} initialError={initialError}>
-      <AppShell nav={STAFF_NAV} section="Operations">
+      <AppShell nav={nav} section="Operations">
         {children}
       </AppShell>
     </DashboardProvider>

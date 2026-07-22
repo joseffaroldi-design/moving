@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Search, Plus, Send, CheckCircle2, Briefcase } from "lucide-react";
+import { Search, Plus, Send, CheckCircle2, Briefcase, Printer } from "lucide-react";
 import { useDashboardData } from "@/components/data/DashboardProvider";
 import { PageHeader } from "@/components/ui/page-header";
 import { DataTable, Thead, Th, Tbody, Tr, Td } from "@/components/ui/table";
@@ -130,6 +130,15 @@ export default function QuotesPage() {
         footer={
           selected && (
             <div className="flex flex-wrap gap-2">
+              <a
+                href={`/print/quote/${selected.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                data-testid="quote-print-link"
+                className="inline-flex flex-1 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-navy hover:bg-cream"
+              >
+                <Printer className="h-4 w-4" /> Print / PDF
+              </a>
               <Button variant="outline" className="flex-1" onClick={() => toast("Quote sent to customer.", "success")}>
                 <Send className="h-4 w-4" /> Send
               </Button>

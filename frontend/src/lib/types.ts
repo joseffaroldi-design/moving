@@ -4,10 +4,12 @@
 export type Role =
   | "owner"
   | "operations_manager"
+  | "manager"
   | "dispatcher"
   | "sales"
   | "crew_lead"
   | "mover"
+  | "crew"
   | "customer";
 
 export interface Customer {

@@ -61,3 +61,19 @@ new, contacted, qualified, quoted, booked.
   mobile clock/photos. These are MOCKED for milestone 1.
 - Supabase free-tier auto-pauses on inactivity → if the app can't reach the backend,
   restore the project from the Supabase dashboard.
+
+## Phase 2/1/8 slice (2026-07 — production hardening, in progress)
+- Migrations AUTHORED (not yet applied by user) in /app/supabase/migrations/:
+  0001_business_profile.sql, 0002_activity_log.sql, 0003_owner_role.sql (promote
+  smagnoliamoving@gmail.com), 0004_job_photos_bucket.sql. All additive/idempotent.
+- Frontend implemented & build-verified: protected-route middleware (redirects
+  unauth /dashboard,/portal,/mobile → /login, verified 307), role-aware nav
+  (allowedStaffNav), /auth/confirm email callback route, Business Profile load/save
+  wired to business_profile table with brand.ts fallback, branded Quote PDF at
+  /print/quote/[id] + Print button in Quotes drawer (verified rendering).
+- Owner: smagnoliamoving@gmail.com. Auth: email/password signup, confirmation ON.
+- PENDING USER ADMIN ACTIONS (one at a time): (1) Auth URL config, (2) run 0001,
+  (3) run 0002 & 0004, (4) sign up + confirm owner, (5) run 0003.
+- NEXT: after auth live — wire Leads/Quotes/Jobs/Dispatch create/edit to authenticated
+  Supabase writes (Phases 3-5), crew mobile clock/photos (6), portal (7), invoices (9),
+  activity logging (10), invoice PDF (8b).

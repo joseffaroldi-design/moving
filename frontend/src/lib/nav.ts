@@ -21,16 +21,22 @@ export interface NavItem {
 }
 
 export const STAFF_NAV: NavItem[] = [
-  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { label: "Leads", href: "/dashboard/leads", icon: Users },
-  { label: "Customers", href: "/dashboard/customers", icon: UserRound },
-  { label: "Quotes", href: "/dashboard/quotes", icon: FileText },
-  { label: "Jobs", href: "/dashboard/jobs", icon: Briefcase },
-  { label: "Dispatch", href: "/dashboard/dispatch", icon: CalendarClock },
-  { label: "Invoices", href: "/dashboard/invoices", icon: Receipt },
-  { label: "Reports", href: "/dashboard/reports", icon: BarChart3 },
-  { label: "Settings", href: "/dashboard/settings", icon: Settings },
+  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, roles: ["owner","operations_manager","manager","dispatcher","sales"] },
+  { label: "Leads", href: "/dashboard/leads", icon: Users, roles: ["owner","operations_manager","manager","sales"] },
+  { label: "Customers", href: "/dashboard/customers", icon: UserRound, roles: ["owner","operations_manager","manager","sales","dispatcher"] },
+  { label: "Quotes", href: "/dashboard/quotes", icon: FileText, roles: ["owner","operations_manager","manager","sales"] },
+  { label: "Jobs", href: "/dashboard/jobs", icon: Briefcase, roles: ["owner","operations_manager","manager","dispatcher"] },
+  { label: "Dispatch", href: "/dashboard/dispatch", icon: CalendarClock, roles: ["owner","operations_manager","manager","dispatcher"] },
+  { label: "Invoices", href: "/dashboard/invoices", icon: Receipt, roles: ["owner","operations_manager","manager"] },
+  { label: "Reports", href: "/dashboard/reports", icon: BarChart3, roles: ["owner","operations_manager","manager"] },
+  { label: "Settings", href: "/dashboard/settings", icon: Settings, roles: ["owner","operations_manager","manager"] },
 ];
+
+// Filter staff nav by role. Unknown/absent role → show all (interim/demo).
+export function allowedStaffNav(role?: string | null): NavItem[] {
+  if (!role) return STAFF_NAV;
+  return STAFF_NAV.filter((item) => !item.roles || item.roles.includes(role as Role));
+}
 
 export const PORTAL_NAV: NavItem[] = [
   { label: "Overview", href: "/portal", icon: LayoutDashboard },
