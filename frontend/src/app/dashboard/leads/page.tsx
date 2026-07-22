@@ -19,7 +19,7 @@ import { leadName, addr, leadVolume, contactEmail, contactPhone } from "@/lib/en
 import {
   LEAD_STATUSES,
   fetchLeads,
-  createLead,
+  createLeadWithCustomer,
   updateLeadStatus,
   type LeadRecord,
   type LeadStatus,
@@ -203,12 +203,11 @@ export default function LeadsPage() {
       <NewLeadDrawer
         open={showNew}
         onClose={() => setShowNew(false)}
-        companyId={companyId}
-        userId={userId}
-        onCreated={(lead) => {
-          setLeads((prev) => [lead, ...prev]);
+        canWrite={canWrite}
+        onCreated={() => {
           setShowNew(false);
           toast("Lead created.", "success");
+          load();
         }}
       />
 
@@ -231,15 +230,13 @@ export default function LeadsPage() {
 function NewLeadDrawer({
   open,
   onClose,
-  companyId,
-  userId,
+  canWrite,
   onCreated,
 }: {
   open: boolean;
   onClose: () => void;
-  companyId: string | null;
-  userId: string | null;
-  onCreated: (lead: LeadRecord) => void;
+  canWrite: boolean;
+  onCreated: () => void;
 }) {
   const toast = useToast();
   const [form, setForm] = useState(EMPTY_FORM);
@@ -254,7 +251,8 @@ function NewLeadDrawer({
   }
 
   async function submit() {
-    if (!companyId || !userId) {
+    if (saving) return; // guard against duplicate submissions
+    if (!canWrite) {
       toast("No company associated with your account.", "error");
       return;
     }
@@ -264,19 +262,12 @@ function NewLeadDrawer({
     }
     setSaving(true);
     try {
-      const { createCustomer } = await import("@/lib/customers");
-      const customer = await createCustomer({
-        company_id: companyId,
-        created_by: userId,
+      // Atomic: single RPC creates customer + lead in one transaction.
+      await createLeadWithCustomer({
         first_name: form.first_name.trim(),
         last_name: form.last_name.trim(),
         email: form.email.trim() || null,
         phone: form.phone.trim() || null,
-      });
-      const lead = await createLead({
-        company_id: companyId,
-        created_by: userId,
-        customer_id: customer.id,
         source: form.source.trim() || null,
         move_date: form.move_date || null,
         origin_address: form.origin_address.trim() || null,
@@ -285,7 +276,7 @@ function NewLeadDrawer({
         estimated_volume_cuft: form.estimated_volume_cuft ? Number(form.estimated_volume_cuft) : null,
         notes: form.notes.trim() || null,
       });
-      onCreated({ ...lead, customers: customer });
+      onCreated();
     } catch (e) {
       toast(e instanceof Error ? e.message : "Could not create lead.", "error");
     } finally {

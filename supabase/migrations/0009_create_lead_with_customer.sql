@@ -1,15 +1,24 @@
 -- =====================================================================
--- 0009_create_lead_with_customer.sql   (DRAFT — do NOT run yet)
--- Atomic lead+customer creation to remove the two-client-write orphan risk.
+-- 0009_create_lead_with_customer.sql
+-- Southern Magnolia Movers — atomic lead+customer creation (removes the
+-- two-client-write orphan risk in the New Lead flow).
 --
--- The frontend currently inserts a customer then a lead as two separate calls;
--- if the lead insert fails, an orphan customer remains. This RPC performs both
--- inserts in ONE transaction (any error rolls back both). SECURITY DEFINER with
--- pinned search_path; all authorization enforced internally (never trusts the
--- client). Only owner/operations_manager/sales may create a customer+lead.
+-- One transaction: customer insert + lead insert. If the lead insert fails,
+-- the customer insert rolls back (a plpgsql function body is atomic within the
+-- calling statement). SECURITY DEFINER is REQUIRED so the single call can write
+-- both rows after internal authorization; all checks are enforced inside.
 --
--- After this is applied, the frontend New Lead flow switches to a single
--- supabase.rpc('create_lead_with_customer', {...}) call.
+-- Authorization (internal, never trusts client):
+--   * requires auth.uid()
+--   * caller must have a profile and be is_active = true
+--   * caller must hold owner / operations_manager / sales for THEIR company
+--     (intersection of leads-insert and customers-insert RLS; dispatcher is
+--      excluded because customers RLS forbids dispatcher inserts)
+--   * company_id is derived from the caller's profile (NOT a client argument)
+--   * created_by is set to auth.uid() (NOT a client argument)
+--   * lead status hardcoded to 'new'
+--
+-- Returns {customer_id, lead_id} as json. Does not weaken any RLS/grant.
 -- =====================================================================
 
 begin;
@@ -27,17 +36,17 @@ create or replace function public.create_lead_with_customer(
   p_estimated_volume_cuft integer default null,
   p_notes                 text default null
 )
-returns uuid
+returns json
 language plpgsql
 security definer
 set search_path = public, pg_temp
 as $$
 declare
-  v_uid       uuid := auth.uid();
-  v_company   uuid;
-  v_active    boolean;
-  v_customer  uuid;
-  v_lead      uuid;
+  v_uid      uuid := auth.uid();
+  v_company  uuid;
+  v_active   boolean;
+  v_customer uuid;
+  v_lead     uuid;
 begin
   if v_uid is null then
     raise exception 'Not authenticated';
@@ -45,6 +54,7 @@ begin
 
   select company_id, is_active into v_company, v_active
     from public.profiles where id = v_uid;
+
   if v_company is null then
     raise exception 'No company associated with your account';
   end if;
@@ -54,7 +64,7 @@ begin
   if not public.has_company_role(
        v_company,
        array['owner','operations_manager','sales']::public.user_role[]) then
-    raise exception 'Insufficient privileges to create a customer';
+    raise exception 'Insufficient privileges to create a customer and lead';
   end if;
   if btrim(coalesce(p_first_name,'')) = '' or btrim(coalesce(p_last_name,'')) = '' then
     raise exception 'First and last name are required';
@@ -69,11 +79,11 @@ begin
   returning id into v_customer;
 
   insert into public.leads (
-    company_id, created_by, customer_id, source, move_date,
+    company_id, created_by, customer_id, status, source, move_date,
     origin_address, destination_address, bedrooms, estimated_volume_cuft, notes
   )
   values (
-    v_company, v_uid, v_customer,
+    v_company, v_uid, v_customer, 'new'::public.lead_status,
     nullif(btrim(coalesce(p_source,'')),''),
     p_move_date,
     nullif(btrim(coalesce(p_origin_address,'')),''),
@@ -83,7 +93,7 @@ begin
   )
   returning id into v_lead;
 
-  return v_lead;  -- both inserts committed together; any failure rolls back both
+  return json_build_object('customer_id', v_customer, 'lead_id', v_lead);
 end;
 $$;
 

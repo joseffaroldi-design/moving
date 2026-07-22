@@ -38,10 +38,11 @@ export interface LeadRecord {
   [key: string]: unknown;
 }
 
-export interface NewLeadInput {
-  company_id: string;
-  created_by: string;
-  customer_id?: string | null;
+export interface NewLeadWithCustomerInput {
+  first_name: string;
+  last_name: string;
+  email?: string | null;
+  phone?: string | null;
   source?: string | null;
   move_date?: string | null;
   origin_address?: string | null;
@@ -64,15 +65,28 @@ export async function fetchLeads(companyId: string): Promise<LeadRecord[]> {
   return (data ?? []) as unknown as LeadRecord[];
 }
 
-export async function createLead(input: NewLeadInput): Promise<LeadRecord> {
+// Atomic: customer + lead created in a single DB transaction via SECURITY
+// DEFINER RPC. company_id and created_by are derived server-side from the
+// caller's session; status is hardcoded to 'new'. Returns both new IDs.
+export async function createLeadWithCustomer(
+  input: NewLeadWithCustomerInput
+): Promise<{ customer_id: string; lead_id: string }> {
   const supabase = getBrowserClient();
-  const { data, error } = await supabase
-    .from("leads")
-    .insert(input)
-    .select(LEAD_SELECT)
-    .single();
+  const { data, error } = await supabase.rpc("create_lead_with_customer", {
+    p_first_name: input.first_name,
+    p_last_name: input.last_name,
+    p_email: input.email ?? null,
+    p_phone: input.phone ?? null,
+    p_source: input.source ?? null,
+    p_move_date: input.move_date ?? null,
+    p_origin_address: input.origin_address ?? null,
+    p_destination_address: input.destination_address ?? null,
+    p_bedrooms: input.bedrooms ?? null,
+    p_estimated_volume_cuft: input.estimated_volume_cuft ?? null,
+    p_notes: input.notes ?? null,
+  });
   if (error) throw new Error(error.message);
-  return data as unknown as LeadRecord;
+  return data as { customer_id: string; lead_id: string };
 }
 
 export async function updateLeadStatus(id: string, status: LeadStatus): Promise<void> {
