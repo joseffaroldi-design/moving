@@ -1,0 +1,27 @@
+-- 0001_profiles_roles.sql
+-- Phase 2 — Profiles & secure role management.
+--
+-- ⚠️ DRAFT — DO NOT RUN YET.
+-- This file is intentionally a placeholder. The existing project already appears
+-- to have a public.profiles table with RLS and role-based access. The exact,
+-- final DDL here will be written ONLY after the read-only preflight query
+-- confirms the real schema (whether `role` exists, is text vs enum, existing
+-- constraints/policies, and any auth.users -> profiles sync trigger/function).
+--
+-- Planned, schema-adaptive behavior (finalized post-preflight):
+--   1. If public.profiles is ABSENT: create it (id uuid PK references auth.users
+--      on delete cascade, email text, full_name text, role text/enum, company_id,
+--      created_at, updated_at) with RLS.
+--   2. If PRESENT: only ADD a `role` column if missing (never drop/alter existing).
+--   3. Approved roles: owner, manager, dispatcher, sales, crew, customer
+--      (reconciled with any existing enum labels such as operations_manager,
+--      crew_lead, mover — no existing labels removed).
+--   4. Secure new-user sync: a SECURITY DEFINER trigger on auth.users that inserts
+--      a profiles row defaulting role='customer' (or reuse the existing
+--      create_owner_profile_for_current_user mechanism if already present).
+--   5. Anti-escalation: a BEFORE UPDATE trigger (or WITH CHECK policy) that blocks
+--      a user from changing their OWN role to a privileged value; only owner/manager
+--      may set privileged roles. Never trust client-supplied role on insert.
+--   6. RLS: user can read/update own profile; owner/manager can read all.
+--
+-- Nothing above is executed. See the preflight query provided in chat.

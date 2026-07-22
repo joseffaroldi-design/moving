@@ -15,7 +15,7 @@ using (
   and exists (
     select 1 from public.profiles p
     where p.id = auth.uid()
-      and p.role in ('owner','manager','operations_manager','dispatcher','crew','crew_lead','mover')
+      and p.role::text in ('owner','manager','operations_manager','dispatcher','crew','crew_lead','mover')
   )
 );
 
