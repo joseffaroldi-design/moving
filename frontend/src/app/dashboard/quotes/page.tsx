@@ -16,6 +16,8 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
 import { formatCurrency, formatDate, titleCase } from "@/lib/format";
 import { quoteCustomer } from "@/lib/entities";
+import { Logo } from "@/components/brand/Logo";
+import { BRAND } from "@/lib/brand";
 import type { Quote } from "@/lib/types";
 
 const MONEY_FIELDS: { key: keyof Quote; label: string }[] = [
@@ -131,7 +133,7 @@ export default function QuotesPage() {
               <Button variant="outline" className="flex-1" onClick={() => toast("Quote sent to customer.", "success")}>
                 <Send className="h-4 w-4" /> Send
               </Button>
-              <Button variant="primary" className="flex-1" onClick={() => toast("Quote approved.", "success")}>
+              <Button variant="gold" className="flex-1" onClick={() => toast("Quote approved.", "success")}>
                 <CheckCircle2 className="h-4 w-4" /> Approve
               </Button>
               <Button variant="navy" onClick={() => setConfirmConvert(true)}>
@@ -143,9 +145,21 @@ export default function QuotesPage() {
       >
         {selected && (
           <div className="space-y-5">
+            {/* Branded quote header */}
+            <div className="rounded-md border border-slate-200 bg-cream-100 p-4">
+              <Logo variant="dark" />
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-gold/30 pt-2 text-xs text-muted">
+                <span>{BRAND.phone}</span>
+                <span>{BRAND.email}</span>
+              </div>
+              <p className="mt-1 font-serif text-[13px] italic text-gold-hover">
+                {BRAND.taglineSecondary}
+              </p>
+            </div>
+
             <div className="flex items-center justify-between">
               <StatusBadge status={selected.status as string} />
-              <span className="font-heading text-xl font-bold text-navy">
+              <span className="font-serif text-2xl font-bold text-navy">
                 {formatCurrency(selected.total ?? selected.subtotal)}
               </span>
             </div>

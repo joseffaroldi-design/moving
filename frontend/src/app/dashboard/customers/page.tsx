@@ -88,7 +88,7 @@ export default function CustomersPage() {
   return (
     <div>
       <PageHeader
-        title="Customers"
+        title="Southern Magnolia Movers Customers"
         description="Your customer directory and history."
         breadcrumbs={[{ label: "Operations", href: "/dashboard" }, { label: "Customers" }]}
       />

@@ -6,14 +6,29 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
+        serif: ["var(--font-playfair)", "Georgia", "serif"],
         heading: ["var(--font-chivo)", "sans-serif"],
         sans: ["var(--font-plex)", "sans-serif"],
       },
       colors: {
         navy: {
-          DEFAULT: "#0B1527",
-          900: "#0B1527",
+          DEFAULT: "#0E2A4A",
+          900: "#0B2038",
+          800: "#13385F",
+          700: "#1C4372",
         },
+        gold: {
+          DEFAULT: "#C89A3D",
+          hover: "#B0842E",
+          soft: "#F0E6C8",
+          light: "#EFDFB4",
+        },
+        cream: {
+          DEFAULT: "#F7F0DF",
+          100: "#FBF7EC",
+        },
+        ink: "#10233F",
+        muted: "#667085",
         slate: {
           50: "#F8FAFC",
           100: "#F1F5F9",
@@ -27,26 +42,22 @@ const config: Config = {
           900: "#0F172A",
         },
         accent: {
-          DEFAULT: "#2563EB",
-          hover: "#1D4ED8",
-          muted: "#EFF6FF",
+          DEFAULT: "#0E2A4A",
+          hover: "#0B2038",
+          muted: "#F0E6C8",
         },
       },
-      borderRadius: {
-        md: "6px",
-      },
+      borderRadius: { md: "6px" },
       boxShadow: {
-        card: "0 1px 2px 0 rgb(15 23 42 / 0.06)",
-        dropdown: "0 10px 25px -5px rgb(15 23 42 / 0.15)",
+        card: "0 1px 2px 0 rgb(14 42 74 / 0.06)",
+        dropdown: "0 10px 25px -5px rgb(14 42 74 / 0.18)",
       },
       keyframes: {
         "fade-in": {
           from: { opacity: "0", transform: "translateY(4px)" },
           to: { opacity: "1", transform: "translateY(0)" },
         },
-        shimmer: {
-          "100%": { transform: "translateX(100%)" },
-        },
+        shimmer: { "100%": { transform: "translateX(100%)" } },
       },
       animation: {
         "fade-in": "fade-in 0.25s ease-out",

@@ -2,13 +2,16 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { Truck, Loader2 } from "lucide-react";
+import { Phone, Mail } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useToast } from "@/components/ui/toast";
 import { homeForRole } from "@/lib/nav";
 import { Input, Label } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Logo } from "@/components/brand/Logo";
+import { BRAND } from "@/lib/brand";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -40,37 +43,32 @@ export default function LoginPage() {
         }
       }
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Authentication failed.";
-      setErr(msg);
+      setErr(e instanceof Error ? e.message : "Authentication failed.");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen bg-cream">
       {/* Left: form */}
-      <div className="flex w-full flex-col justify-center px-6 py-10 sm:px-12 lg:w-1/2">
-        <div className="mx-auto w-full max-w-sm">
-          <Link href="/" className="mb-8 flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-md bg-accent">
-              <Truck className="h-5 w-5 text-white" />
-            </div>
-            <span className="font-heading text-xl font-bold text-navy">
-              MoveOps
-            </span>
-          </Link>
+      <div className="flex w-full flex-col justify-between px-6 py-8 sm:px-12 lg:w-[46%]">
+        <Logo variant="dark" />
 
-          <h1 className="font-heading text-2xl font-bold text-navy">
-            {mode === "login" ? "Sign in to your account" : "Create your account"}
+        <div className="mx-auto w-full max-w-sm py-8">
+          <p className="mb-1 text-xs font-semibold uppercase tracking-[0.3em] text-gold-hover">
+            Operations Portal
+          </p>
+          <h1 className="font-serif text-3xl font-bold text-navy">
+            {mode === "login" ? "Welcome back" : "Create your account"}
           </h1>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-2 text-sm text-muted">
             {mode === "login"
-              ? "Enter your credentials to access the operations console."
+              ? "Sign in to manage leads, quotes, jobs, and dispatch."
               : "Set up the first owner account for your company."}
           </p>
 
-          <form onSubmit={onSubmit} className="mt-6 space-y-4">
+          <form onSubmit={onSubmit} className="mt-7 space-y-4">
             <div>
               <Label htmlFor="email">Email</Label>
               <Input
@@ -86,14 +84,9 @@ export default function LoginPage() {
             </div>
             <div>
               <div className="mb-1.5 flex items-center justify-between">
-                <Label htmlFor="password" className="mb-0">
-                  Password
-                </Label>
+                <Label htmlFor="password" className="mb-0">Password</Label>
                 {mode === "login" && (
-                  <Link
-                    href="/forgot-password"
-                    className="text-xs font-medium text-accent hover:underline"
-                  >
+                  <Link href="/forgot-password" className="text-xs font-semibold text-gold-hover hover:underline">
                     Forgot password?
                   </Link>
                 )}
@@ -112,84 +105,60 @@ export default function LoginPage() {
             </div>
 
             {err && (
-              <p
-                data-testid="login-error"
-                className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
-              >
+              <p data-testid="login-error" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
                 {err}
               </p>
             )}
 
-            <Button
-              type="submit"
-              variant="navy"
-              className="w-full"
-              size="lg"
-              loading={loading}
-              data-testid="login-submit"
-            >
+            <Button type="submit" variant="navy" className="w-full" size="lg" loading={loading} data-testid="login-submit">
               {mode === "login" ? "Sign in" : "Create account"}
             </Button>
           </form>
 
-          <p className="mt-6 text-center text-sm text-slate-500">
+          <p className="mt-6 text-center text-sm text-muted">
             {mode === "login" ? (
-              <>
-                No account yet?{" "}
-                <button
-                  onClick={() => {
-                    setMode("signup");
-                    setErr(null);
-                  }}
-                  className="font-medium text-accent hover:underline"
-                  data-testid="switch-to-signup"
-                >
-                  Create one
+              <>New here?{" "}
+                <button onClick={() => { setMode("signup"); setErr(null); }} className="font-semibold text-navy hover:text-gold-hover" data-testid="switch-to-signup">
+                  Create an account
                 </button>
               </>
             ) : (
-              <>
-                Already have an account?{" "}
-                <button
-                  onClick={() => {
-                    setMode("login");
-                    setErr(null);
-                  }}
-                  className="font-medium text-accent hover:underline"
-                  data-testid="switch-to-login"
-                >
+              <>Already have an account?{" "}
+                <button onClick={() => { setMode("login"); setErr(null); }} className="font-semibold text-navy hover:text-gold-hover" data-testid="switch-to-login">
                   Sign in
                 </button>
               </>
             )}
           </p>
+        </div>
 
-          <p className="mt-8 text-center text-xs text-slate-400">
-            Just exploring?{" "}
-            <Link href="/dashboard" className="text-slate-500 hover:underline">
-              View the live demo dashboard
-            </Link>
-          </p>
+        <div className="flex flex-col gap-1 text-xs text-muted sm:flex-row sm:items-center sm:gap-5">
+          <a href={BRAND.phoneHref} className="inline-flex items-center gap-1.5 hover:text-navy">
+            <Phone className="h-3.5 w-3.5 text-gold-hover" /> {BRAND.phone}
+          </a>
+          <a href={BRAND.emailHref} className="inline-flex items-center gap-1.5 hover:text-navy">
+            <Mail className="h-3.5 w-3.5 text-gold-hover" /> {BRAND.email}
+          </a>
         </div>
       </div>
 
-      {/* Right: image */}
-      <div
-        className="relative hidden bg-navy lg:block lg:w-1/2"
-        style={{
-          backgroundImage:
-            "linear-gradient(to bottom right, rgba(11,21,39,0.75), rgba(11,21,39,0.92)), url('https://images.pexels.com/photos/33897865/pexels-photo-33897865.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940')",
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-        }}
-      >
-        <div className="absolute bottom-0 left-0 p-12 text-white">
-          <p className="font-heading text-3xl font-bold leading-tight">
-            Every move, under control.
+      {/* Right: brand art */}
+      <div className="relative hidden overflow-hidden bg-navy lg:block lg:w-[54%]">
+        <Image
+          src="/brand/login-art.jpg"
+          alt="New Orleans skyline with the Crescent City Connection bridge"
+          fill
+          priority
+          className="object-cover opacity-90"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-navy via-navy/40 to-transparent" />
+        <div className="absolute bottom-0 left-0 p-12">
+          <p className="font-serif text-3xl font-bold leading-tight text-cream">
+            {BRAND.taglinePrimary}
           </p>
           <p className="mt-3 max-w-md text-slate-300">
-            From the first call to the final invoice — MoveOps keeps your sales,
-            dispatch, and crews working from a single source of truth.
+            The internal operating system for {BRAND.name} — from the first lead to
+            the final invoice.
           </p>
         </div>
       </div>

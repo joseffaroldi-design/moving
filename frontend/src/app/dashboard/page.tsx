@@ -7,6 +7,8 @@ import {
   FileText,
   Briefcase,
   CalendarClock,
+  CalendarCheck,
+  DollarSign,
   Truck,
   ArrowRight,
   CheckCircle2,
@@ -21,17 +23,41 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { formatCurrency, formatDate, titleCase } from "@/lib/format";
 import { leadName, quoteCustomer, jobCustomer, addr } from "@/lib/entities";
+import { BRAND } from "@/lib/brand";
+import { CrescentMark } from "@/components/brand/Logo";
 
 export default function DashboardPage() {
   const { data, loading, error, refetch } = useDashboardData();
 
+  const revenue = (data?.recentQuotes ?? []).reduce(
+    (sum, q) => sum + (Number(q.total ?? q.subtotal) || 0),
+    0
+  );
+
   return (
     <div>
       <PageHeader
-        title="Dashboard"
-        description="Operational snapshot of your moving business."
+        title="Southern Magnolia Movers Operations"
+        description="Your live operational snapshot."
         breadcrumbs={[{ label: "Operations" }, { label: "Dashboard" }]}
       />
+
+      {/* Branded welcome banner */}
+      <div className="mb-6 flex items-center gap-4 overflow-hidden rounded-md border border-navy-800 bg-navy px-5 py-4">
+        <CrescentMark className="hidden h-11 w-11 shrink-0 sm:block" />
+        <div className="flex-1">
+          <p className="font-serif text-xl font-bold text-cream sm:text-2xl">
+            {BRAND.welcome}
+          </p>
+          <p className="mt-0.5 text-sm text-slate-300">{BRAND.taglineSecondary}</p>
+        </div>
+        <div className="hidden items-center gap-2 rounded-md border border-gold/40 bg-navy-900 px-3 py-2 text-right md:flex">
+          <div>
+            <p className="text-[11px] uppercase tracking-wider text-gold">Dispatch line</p>
+            <p className="font-heading text-sm font-semibold text-cream">{BRAND.phone}</p>
+          </div>
+        </div>
+      </div>
 
       {error ? (
         <ErrorState
@@ -42,9 +68,9 @@ export default function DashboardPage() {
       ) : (
         <div className="space-y-6">
           {/* Stat cards */}
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6">
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             {loading || !data ? (
-              Array.from({ length: 6 }).map((_, i) => <StatCardSkeleton key={i} />)
+              Array.from({ length: 8 }).map((_, i) => <StatCardSkeleton key={i} />)
             ) : (
               <>
                 <StatCard label="Customers" value={data.counts.customers} icon={UserRound} data-testid="stat-customers" />
@@ -53,6 +79,8 @@ export default function DashboardPage() {
                 <StatCard label="Jobs" value={data.counts.jobs} icon={Briefcase} data-testid="stat-jobs" />
                 <StatCard label="Dispatch" value={data.counts.dispatchAssignments} icon={CalendarClock} data-testid="stat-dispatch" />
                 <StatCard label="Trucks" value={data.counts.trucks} icon={Truck} data-testid="stat-trucks" />
+                <StatCard label="Pipeline Revenue" value={formatCurrency(revenue)} icon={DollarSign} data-testid="stat-revenue" />
+                <StatCard label="Upcoming Moves" value={data.upcomingJobs.length} icon={CalendarCheck} data-testid="stat-upcoming" />
               </>
             )}
           </div>

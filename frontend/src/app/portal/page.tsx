@@ -8,7 +8,7 @@ export default function PortalHome() {
   return (
     <div>
       <PageHeader
-        title="Welcome to your portal"
+        title="Southern Magnolia Movers Customer Portal"
         description="Review your quotes, make payments, and track your move."
       />
       <div className="grid gap-4 sm:grid-cols-3">
@@ -30,12 +30,12 @@ export default function PortalHome() {
 
 function PortalCard({ href, icon: Icon, title, desc }: { href: string; icon: typeof FileText; title: string; desc: string }) {
   return (
-    <Link href={href} className="rounded-md border border-slate-200 bg-white p-5 shadow-card transition-colors hover:border-accent">
-      <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-md bg-accent-muted">
-        <Icon className="h-5 w-5 text-accent" />
+    <Link href={href} className="rounded-md border border-slate-200 bg-white p-5 shadow-card transition-colors hover:border-gold">
+      <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-md bg-gold-soft">
+        <Icon className="h-5 w-5 text-navy" />
       </div>
-      <h3 className="font-heading text-base font-semibold text-navy">{title}</h3>
-      <p className="mt-1 text-sm text-slate-500">{desc}</p>
+      <h3 className="font-serif text-lg font-bold text-navy">{title}</h3>
+      <p className="mt-1 text-sm text-muted">{desc}</p>
     </Link>
   );
 }

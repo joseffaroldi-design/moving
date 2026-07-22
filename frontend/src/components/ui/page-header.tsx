@@ -28,7 +28,7 @@ export function PageHeader({
             <span key={i} className="flex items-center gap-1">
               {i > 0 && <ChevronRight className="h-3 w-3 text-slate-400" />}
               {c.href ? (
-                <Link href={c.href} className="hover:text-accent">
+                <Link href={c.href} className="hover:text-gold-hover">
                   {c.label}
                 </Link>
               ) : (
@@ -40,7 +40,7 @@ export function PageHeader({
       )}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="font-heading text-2xl font-bold tracking-tight text-navy">
+          <h1 className="font-serif text-2xl font-bold tracking-tight text-navy sm:text-[28px]">
             {title}
           </h1>
           {description && (

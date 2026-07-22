@@ -1,0 +1,28 @@
+{
+  "summary": "Iteration 2 frontend-only regression + rebrand verification for Southern Magnolia Movers. All 11 acceptance criteria PASS. Dashboard renders live seeded data (Customers=5, Leads=5, Quotes=2, Jobs=1, Dispatch=1, Trucks=3, Pipeline Revenue=$3,680.00, Upcoming Moves=1) with page title 'Southern Magnolia Movers Operations' and welcome banner 'Moving You Forward.' — no loading skeletons. Sidebar branded 'Southern Magnolia / MOVERS' with crescent logo; all 9 nav items navigate without error and gold active indicator visible. Leads table renders 5 rows, leads-search filters ('Alicia' -> 1 row), lead-row-0 opens drawer with email/phone/origin/destination. Quotes table shows 2 rows; quote-row-0 drawer contains branded header with Southern Magnolia logo, phone (504) 559-6340, email smagnoliamoving@gmail.com, tagline 'Big or Small, We Haul It All.', pricing total and Approve button. Jobs table shows JOB-DEMO-001 (Emily Ross) with drawer status timeline + origin/destination. Dispatch shows assignment-row-0 with Truck 1 - 26ft and window 9:00 AM – 3:00 PM. Customers page title 'Southern Magnolia Movers Customers', 5 rows, drawer shows related leads/quotes/jobs. Settings Business Profile prefilled with correct name/phone/email; Save produces 'Business profile saved.' toast; health-check-button produces 'Backend is healthy and reachable.' toast. Login is fully rebranded (OPERATIONS PORTAL eyebrow, Welcome back, all testids, Forgot password link, Create an account toggle, footer phone/email, NOLA moon+bridge hero art). Forgot-password page renders reset-email + reset-submit. Customer portal /portal renders 'Southern Magnolia Movers Customer Portal' with Quotes/Payments/Documents cards, no errors. /mobile redirects to /mobile/jobs, header 'Southern Magnolia Crew', bottom nav navigates jobs/clock/photos/checklists, seeded JOB-DEMO-001 lists. /dashboard/leads at 390px shows lead-card-0 stacked cards and mobile-menu-button opens the sidebar drawer.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "No blockers. Rebrand is complete and all functional regressions pass. Iteration 2 verified end-to-end."
+  ],
+  "critical_code_review_comments": [
+    "brand.ts is a single source of truth for name/phone/email/tagline — good pattern; ensure any future references (email templates, PDFs) also import from lib/brand.ts to avoid drift.",
+    "The quote drawer branded header renders the wordmark as two lines ('Southern Magnolia' / 'MOVERS') via the Logo component. When exporting/printing a quote (future feature), consider a single-line variant for narrow print widths.",
+    "Settings Save button is a client-side toast (per spec — intentionally mocked). When persistence is added, wire it to a Supabase table and invalidate the layout server fetch so the branded header updates in-app.",
+    "AppShell nav-* testids are derived from label slugs; labels remain single-word so this is fine. Same applies to mobile-nav-* which is stable.",
+    "Fleet panel on /dashboard/dispatch (flagged as OPTIONAL polish in iteration 1) still shows only truck count (3) — trucks are visible inside the assignment card, so acceptance is met, but populating the Fleet section with the 3 seeded trucks would improve the page."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped per request)", "frontend": "100%"},
+  "test_credentials": "None required — /dashboard, /portal, /mobile/* and layout data all use the PUBLIC mvp-dashboard Supabase Edge Function. Login was NOT attempted (no seeded auth user per instructions).",
+  "seed_data_creation": "None — used the pre-seeded Southern Magnolia (MoveOps Demo Company) data returned by the public mvp-dashboard Edge Function.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Iteration 2 (rebrand + new dashboard cards + Settings Business Profile + branded quote drawer header + branded login/mobile/portal) is fully verified at 100%. Palette navy/gold/cream is applied, Playfair Display serif brand headings are visible, crescent-moon logo renders on sidebar/login/quote drawer, and business contact info (504) 559-6340 / smagnoliamoving@gmail.com is consistent across login footer, Settings and quote drawer. Action buttons (New Lead, Create Quote/Add Note, quote Send/Approve/To Job, dispatch assign, mobile clock/photos, Save business profile) remain intentional toast-only placeholders per spec — do NOT flag them as bugs. Next iterations will likely wire these to real mutations and add authenticated multi-tenant flows. Preview URL: https://ops-preview-7.preview.emergentagent.com.",
+  "rca of the issue": "N/A — no failing scenarios. Two false-positive log lines to disregard: (1) 'mobile-nav-jobs nav FAIL: Timeout' occurred because the test clicked mobile-nav-jobs while already on /mobile/jobs, so wait_for_url could not detect a change; the button is functional. (2) 'nav-dashboard visible: False' after mobile-menu-button click — the mobile drawer contains its own copy of nav items and the desktop-sidebar nav-dashboard remains hidden; the drawer screenshot confirms Dashboard/Leads/etc. are visible and clickable."
+}

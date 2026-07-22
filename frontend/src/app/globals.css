@@ -7,13 +7,13 @@
     -webkit-text-size-adjust: 100%;
   }
   body {
-    @apply bg-slate-100 font-sans text-slate-700 antialiased;
+    @apply bg-cream font-sans text-slate-700 antialiased;
   }
   * {
     @apply border-slate-200;
   }
   ::selection {
-    @apply bg-accent/20 text-navy;
+    @apply bg-gold/25 text-navy;
   }
 }
 

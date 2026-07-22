@@ -17,6 +17,8 @@ import { cn } from "@/lib/utils";
 import type { NavItem } from "@/lib/nav";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { initials } from "@/lib/format";
+import { BRAND } from "@/lib/brand";
+import { Logo, CrescentMark } from "@/components/brand/Logo";
 
 function isActive(pathname: string, href: string) {
   if (href === "/dashboard" || href === "/portal" || href === "/mobile")
@@ -49,8 +51,8 @@ function NavLinks({
             className={cn(
               "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
               active
-                ? "border-l-2 border-accent bg-slate-800 text-white"
-                : "border-l-2 border-transparent text-slate-300 hover:bg-slate-800 hover:text-white",
+                ? "border-l-2 border-gold bg-navy-800 text-white"
+                : "border-l-2 border-transparent text-slate-300 hover:bg-navy-800 hover:text-white",
               collapsed && "justify-center px-0"
             )}
             title={collapsed ? item.label : undefined}
@@ -87,7 +89,7 @@ export function AppShell({
     email.split("@")[0];
   const companyName =
     (me?.company as Record<string, unknown> | null)?.name?.toString() ||
-    "MoveOps";
+    BRAND.name;
   const role = (me?.role as string) ?? null;
 
   async function handleSignOut() {
@@ -99,7 +101,7 @@ export function AppShell({
     nav.find((n) => isActive(pathname, n.href))?.label ?? section;
 
   return (
-    <div className="flex min-h-screen bg-slate-100">
+    <div className="flex min-h-screen bg-cream">
       {/* Desktop sidebar */}
       <aside
         className={cn(
@@ -109,27 +111,21 @@ export function AppShell({
       >
         <div
           className={cn(
-            "flex h-14 items-center gap-2 border-b border-slate-800 px-4",
+            "flex h-16 items-center gap-2 border-b border-navy-800 px-4",
             collapsed && "justify-center px-0"
           )}
         >
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-accent">
-            <Truck className="h-5 w-5 text-white" />
-          </div>
-          {!collapsed && (
-            <div className="min-w-0">
-              <p className="truncate font-heading text-sm font-bold text-white">
-                MoveOps
-              </p>
-              <p className="truncate text-[11px] text-slate-400">{section}</p>
-            </div>
+          {collapsed ? (
+            <CrescentMark className="h-9 w-9" />
+          ) : (
+            <Logo variant="light" />
           )}
         </div>
         <NavLinks nav={nav} pathname={pathname} collapsed={collapsed} />
         <button
           data-testid="sidebar-collapse"
           onClick={() => setCollapsed((c) => !c)}
-          className="flex items-center gap-2 border-t border-slate-800 px-4 py-3 text-xs font-medium text-slate-400 hover:text-white"
+          className="flex items-center gap-2 border-t border-navy-800 px-4 py-3 text-xs font-medium text-slate-400 hover:text-gold"
         >
           <ChevronLeft
             className={cn("h-4 w-4 transition-transform", collapsed && "rotate-180")}
@@ -146,10 +142,8 @@ export function AppShell({
             onClick={() => setMobileOpen(false)}
           />
           <aside className="absolute inset-y-0 left-0 flex w-64 flex-col bg-navy">
-            <div className="flex h-14 items-center justify-between border-b border-slate-800 px-4">
-              <span className="font-heading text-sm font-bold text-white">
-                MoveOps
-              </span>
+            <div className="flex h-16 items-center justify-between border-b border-navy-800 px-4">
+              <Logo variant="light" />
               <button onClick={() => setMobileOpen(false)} className="text-slate-300">
                 <X className="h-5 w-5" />
               </button>
@@ -201,7 +195,7 @@ export function AppShell({
               className="relative rounded-md p-2 text-slate-500 hover:bg-slate-100"
             >
               <Bell className="h-5 w-5" />
-              <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-accent" />
+              <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-gold" />
             </button>
             <div className="relative">
               <button

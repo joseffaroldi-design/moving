@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Truck, ArrowLeft, MailCheck } from "lucide-react";
+import { ArrowLeft, MailCheck } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { Input, Label } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Logo } from "@/components/brand/Logo";
 
 export default function ForgotPasswordPage() {
   const { resetPassword } = useAuth();
@@ -29,13 +30,10 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-100 px-6">
+    <div className="flex min-h-screen items-center justify-center bg-cream px-6">
       <div className="w-full max-w-sm rounded-md border border-slate-200 bg-white p-8 shadow-card">
-        <Link href="/" className="mb-6 flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-accent">
-            <Truck className="h-5 w-5 text-white" />
-          </div>
-          <span className="font-heading text-xl font-bold text-navy">MoveOps</span>
+        <Link href="/" className="mb-6 inline-block">
+          <Logo variant="dark" />
         </Link>
 
         {sent ? (
@@ -43,7 +41,7 @@ export default function ForgotPasswordPage() {
             <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-emerald-50">
               <MailCheck className="h-5 w-5 text-emerald-600" />
             </div>
-            <h1 className="font-heading text-xl font-bold text-navy">
+            <h1 className="font-serif text-2xl font-bold text-navy">
               Check your email
             </h1>
             <p className="mt-1 text-sm text-slate-500">
@@ -53,7 +51,7 @@ export default function ForgotPasswordPage() {
           </div>
         ) : (
           <>
-            <h1 className="font-heading text-xl font-bold text-navy">
+            <h1 className="font-serif text-2xl font-bold text-navy">
               Reset your password
             </h1>
             <p className="mt-1 text-sm text-slate-500">
@@ -92,7 +90,7 @@ export default function ForgotPasswordPage() {
 
         <Link
           href="/login"
-          className="mt-6 inline-flex items-center gap-1.5 text-sm font-medium text-accent hover:underline"
+          className="mt-6 inline-flex items-center gap-1.5 text-sm font-semibold text-gold-hover hover:underline"
         >
           <ArrowLeft className="h-4 w-4" /> Back to sign in
         </Link>
