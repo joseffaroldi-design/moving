@@ -26,7 +26,14 @@ dispatch_assignments,trucks}, leads[], quotes[], jobs[], dispatch[], (no top-lev
 trucks[] or onboarding[]). Customer joined under `customers` (plural). Lead statuses:
 new, contacted, qualified, quoted, booked.
 
-## Implemented & VERIFIED (testing agent iteration_1 = 100% frontend pass)
+## Implemented & VERIFIED (testing agent iteration_1 = 100%, iteration_2 rebrand = 100%)
+- **Southern Magnolia Movers rebrand (iteration 2, 2026-07-22):** navy/gold/cream
+  design tokens, Playfair Display serif brand headings, crescent-moon SVG logo +
+  favicon/login art, business identity in `src/lib/brand.ts` ((504) 559-6340 /
+  smagnoliamoving@gmail.com, taglines). Branded: login (NOLA hero art), app shell
+  (gold active nav), dashboard (welcome banner + Pipeline Revenue + Upcoming Moves
+  cards), quotes drawer (branded quote header), settings (editable Business Profile),
+  portal, crew mobile ("Southern Magnolia Crew"). Production build passes (25 routes).
 - Fresh Next.js App Router + TS project (replaced legacy CRA scaffold).
 - App shell (navy sidebar, topbar, breadcrumbs, mobile drawer), reusable UI kit.
 - Dashboard renders real seeded data: counts 5/5/2/1/1/3, recent leads/quotes,
