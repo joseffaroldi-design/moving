@@ -32,6 +32,9 @@ create index if not exists lead_notes_company_id_idx   on public.lead_notes (com
 -- ---------------------------------------------------------------------
 revoke all on table public.lead_notes from anon;
 revoke all on table public.lead_notes from public;
+-- Supabase default privileges auto-grant ALL to authenticated on new tables;
+-- strip everything except the append-only minimum (SELECT + INSERT).
+revoke delete, truncate, trigger, references, update on table public.lead_notes from authenticated;
 grant  select, insert on table public.lead_notes to authenticated;
 
 -- ---------------------------------------------------------------------
