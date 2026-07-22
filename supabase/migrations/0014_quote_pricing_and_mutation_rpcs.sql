@@ -1,88 +1,78 @@
 -- =====================================================================
--- 0014_quote_pricing_and_mutation_rpcs.sql
+-- 0014_quote_pricing_and_mutation_rpcs.sql  (CORRECTED)
 -- Southern Magnolia Movers — Phase 4 (Quotes) pricing + atomic mutations.
 --
--- Adds 3 additive columns, one authoritative server-side pricing engine,
--- and the RPC-only mutation surface. authenticated has NO direct write
--- grant (0011) — every mutation flows through these SECURITY DEFINER
--- functions, which derive company_id + actor server-side, enforce roles,
--- verify cross-company ownership, and compute all money server-side.
+-- Adds 3 additive columns + CHECK constraints, one authoritative server-side
+-- pricing engine, and the RPC-only mutation surface. authenticated has NO
+-- direct write grant (0011) — every mutation flows through SECURITY DEFINER
+-- RPCs that derive company_id + actor server-side, enforce roles, verify
+-- cross-company ownership, and compute all money server-side.
 --
--- EXISTING DATA: the 2 legacy quotes are NOT recomputed. New columns get
--- defaults (0); their historical subtotal/tax/total are left as-is.
+-- Security model (exactly 8 SECURITY DEFINER functions):
+--   DEFINER (privileged): _require_quote_mutator, _compute_quote_totals,
+--     create_quote_with_items, update_draft_quote_with_items, duplicate_quote,
+--     mark_quote_sent, expire_quote, cancel_quote
+--   INVOKER (pure validators, no table access): _assert_quote_scalars,
+--     _assert_quote_line_items
+--   All 10: EXECUTE revoked from PUBLIC + anon. authenticated may EXECUTE only
+--   the 6 client RPCs; both helpers AND both validators are client-unavailable.
 --
--- AUTHORITATIVE PRICING (percent inputs are 0..100, divided by 100):
---   labor_amount        = round(coalesce(hourly_rate,0)*coalesce(estimated_hours,0), 2)
---   line_item_amount    = round(sum(quantity*unit_price), 2)
---   gross_subtotal      = round(labor + line_items + travel + packing + materials, 2)
---   discounted_subtotal = round(greatest(gross_subtotal - discount, 0), 2)
---   tax                 = round(discounted_subtotal * tax_rate/100, 2)
---   total               = round(greatest(discounted_subtotal + tax, 0), 2)
---   deposit_amount      = round(total * deposit_percent/100, 2)
---   (stored: subtotal = gross_subtotal, plus tax/total/deposit_amount)
+-- EXISTING DATA: the 2 legacy quotes are NOT recomputed. New columns default 0
+-- (satisfy the CHECKs); historical subtotal/tax/total/status left as-is.
 --
--- VALIDATION: no negative hourly_rate/hours/fees/discount/qty/unit_price;
--- discount <= gross_subtotal; tax_rate & deposit_percent in [0,100]. Client
--- may NOT submit authoritative subtotal/tax/total/deposit_amount. Labor is
--- modeled ONLY as scalar hourly_rate*hours (UI must not also add a labor
--- line item) — prevents double counting.
+-- AUTHORITATIVE PRICING (percent inputs 0..100, divided by 100):
+--   labor        = round(coalesce(hourly_rate,0)*coalesce(estimated_hours,0),2)
+--   line_items   = round(sum(quantity*unit_price),2)
+--   gross        = round(labor+line_items+travel+packing+materials,2)
+--   discounted   = round(greatest(gross-discount,0),2)   (discount<=gross enforced)
+--   tax          = round(discounted*tax_rate/100,2)
+--   total        = round(greatest(discounted+tax,0),2)
+--   deposit_amt  = round(total*deposit_percent/100,2)
+--   (stored: subtotal=gross, plus tax/total/deposit_amount)
 --
 -- Roles for all mutations: owner, operations_manager, sales (dispatcher is
--- read-only in Phase 4). Approve/Decline/Viewed use the token path (0015);
--- Convert is the Phase-5 handoff (0016).
+-- read-only in Phase 4). Approve/Decline/Viewed = token path (0015); Convert =
+-- Phase-5 handoff (0016).
 -- =====================================================================
 
 begin;
 
 -- ---------------------------------------------------------------------
--- 1. ADDITIVE COLUMNS (defaults; existing rows unaffected)
+-- 1. ADDITIVE COLUMNS + CHECK CONSTRAINTS (defaults; existing rows valid)
 -- ---------------------------------------------------------------------
 alter table public.quotes add column if not exists tax_rate        numeric not null default 0;
 alter table public.quotes add column if not exists deposit_percent numeric not null default 0;
 alter table public.quotes add column if not exists deposit_amount  numeric not null default 0;
 
--- ---------------------------------------------------------------------
--- 2. INTERNAL HELPERS (not client-callable)
--- ---------------------------------------------------------------------
--- Authorize a quote-mutating actor; returns their company_id.
-create or replace function public._require_quote_mutator()
-returns uuid
-language plpgsql
-security definer
-set search_path = public, pg_temp
-as $$
-declare
-  v_uid     uuid := auth.uid();
-  v_company uuid;
-  v_active  boolean;
+do $$
 begin
-  if v_uid is null then
-    raise exception 'Not authenticated';
+  if not exists (select 1 from pg_constraint
+                 where conname = 'quotes_tax_rate_range' and conrelid = 'public.quotes'::regclass) then
+    alter table public.quotes
+      add constraint quotes_tax_rate_range check (tax_rate >= 0 and tax_rate <= 100);
   end if;
-  select company_id, is_active into v_company, v_active
-    from public.profiles where id = v_uid;
-  if v_company is null then
-    raise exception 'No company associated with your account';
+  if not exists (select 1 from pg_constraint
+                 where conname = 'quotes_deposit_percent_range' and conrelid = 'public.quotes'::regclass) then
+    alter table public.quotes
+      add constraint quotes_deposit_percent_range check (deposit_percent >= 0 and deposit_percent <= 100);
   end if;
-  if v_active is not true then
-    raise exception 'Caller account is not active';
+  if not exists (select 1 from pg_constraint
+                 where conname = 'quotes_deposit_amount_nonneg' and conrelid = 'public.quotes'::regclass) then
+    alter table public.quotes
+      add constraint quotes_deposit_amount_nonneg check (deposit_amount >= 0);
   end if;
-  if not public.has_company_role(
-       v_company,
-       array['owner','operations_manager','sales']::public.user_role[]) then
-    raise exception 'Insufficient privileges for quote operations';
-  end if;
-  return v_company;
-end;
-$$;
+end $$;
 
--- Validate scalar numeric inputs (no table access).
+-- ---------------------------------------------------------------------
+-- 2a. VALIDATORS — SECURITY INVOKER, no table access
+-- ---------------------------------------------------------------------
 create or replace function public._assert_quote_scalars(
   p_hourly_rate numeric, p_estimated_hours numeric,
   p_travel_fee numeric, p_packing_fee numeric, p_materials_fee numeric,
   p_discount numeric, p_tax_rate numeric, p_deposit_percent numeric)
 returns void
 language plpgsql
+security invoker
 immutable
 set search_path = public, pg_temp
 as $$
@@ -100,27 +90,85 @@ begin
 end;
 $$;
 
--- Validate a jsonb array of line items (no table access).
 create or replace function public._assert_quote_line_items(p_line_items jsonb)
 returns void
 language plpgsql
+security invoker
 immutable
 set search_path = public, pg_temp
 as $$
+declare
+  elem   jsonb;
+  v_desc text;
+  v_qty  numeric;
+  v_prc  numeric;
 begin
-  if exists (
-    select 1
-    from jsonb_array_elements(coalesce(p_line_items, '[]'::jsonb)) li
-    where btrim(coalesce(li->>'description','')) = ''
-       or coalesce((li->>'quantity')::numeric, 1) < 0
-       or coalesce((li->>'unit_price')::numeric, 0) < 0
-  ) then
-    raise exception 'Each line item needs a description; quantity and unit_price must be >= 0';
+  if p_line_items is null then
+    return;
   end if;
+  if jsonb_typeof(p_line_items) <> 'array' then
+    raise exception 'line_items must be a JSON array';
+  end if;
+
+  for elem in select value from jsonb_array_elements(p_line_items) loop
+    if jsonb_typeof(elem) <> 'object' then
+      raise exception 'Each line item must be a JSON object';
+    end if;
+
+    v_desc := btrim(coalesce(elem->>'description',''));
+    if v_desc = '' then
+      raise exception 'Each line item needs a non-empty description';
+    end if;
+
+    begin
+      v_qty := coalesce((elem->>'quantity')::numeric, 1);
+    exception when others then
+      raise exception 'Line item "%" has a non-numeric quantity: %', v_desc, elem->>'quantity';
+    end;
+
+    begin
+      v_prc := coalesce((elem->>'unit_price')::numeric, 0);
+    exception when others then
+      raise exception 'Line item "%" has a non-numeric unit_price: %', v_desc, elem->>'unit_price';
+    end;
+
+    if v_qty < 0 then
+      raise exception 'Line item "%" quantity cannot be negative', v_desc;
+    end if;
+    if v_prc < 0 then
+      raise exception 'Line item "%" unit_price cannot be negative', v_desc;
+    end if;
+  end loop;
 end;
 $$;
 
--- Recompute + persist authoritative totals for one quote.
+-- ---------------------------------------------------------------------
+-- 2b. PRIVILEGED HELPERS — SECURITY DEFINER
+-- ---------------------------------------------------------------------
+create or replace function public._require_quote_mutator()
+returns uuid
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_uid     uuid := auth.uid();
+  v_company uuid;
+  v_active  boolean;
+begin
+  if v_uid is null then raise exception 'Not authenticated'; end if;
+  select company_id, is_active into v_company, v_active
+    from public.profiles where id = v_uid;
+  if v_company is null then raise exception 'No company associated with your account'; end if;
+  if v_active is not true then raise exception 'Caller account is not active'; end if;
+  if not public.has_company_role(
+       v_company, array['owner','operations_manager','sales']::public.user_role[]) then
+    raise exception 'Insufficient privileges for quote operations';
+  end if;
+  return v_company;
+end;
+$$;
+
 create or replace function public._compute_quote_totals(p_quote uuid)
 returns void
 language plpgsql
@@ -128,19 +176,17 @@ security definer
 set search_path = public, pg_temp
 as $$
 declare
-  q        record;
-  v_labor  numeric;
-  v_items  numeric;
-  v_gross  numeric;
-  v_disc   numeric;
-  v_tax    numeric;
-  v_total  numeric;
-  v_dep    numeric;
+  q       record;
+  v_labor numeric;
+  v_items numeric;
+  v_gross numeric;
+  v_disc  numeric;
+  v_tax   numeric;
+  v_total numeric;
+  v_dep   numeric;
 begin
   select * into q from public.quotes where id = p_quote;
-  if not found then
-    raise exception 'Quote not found';
-  end if;
+  if not found then raise exception 'Quote not found'; end if;
 
   v_labor := round(coalesce(q.hourly_rate,0) * coalesce(q.estimated_hours,0), 2);
 
@@ -164,20 +210,15 @@ begin
   v_dep   := round(v_total * coalesce(q.deposit_percent,0) / 100, 2);
 
   update public.quotes
-     set subtotal       = v_gross,
-         tax            = v_tax,
-         total          = v_total,
-         deposit_amount = v_dep,
-         updated_at     = now()
+     set subtotal = v_gross, tax = v_tax, total = v_total,
+         deposit_amount = v_dep, updated_at = now()
    where id = p_quote;
 end;
 $$;
 
 -- ---------------------------------------------------------------------
--- 3. MUTATION RPCs
+-- 3. MUTATION RPCs — SECURITY DEFINER
 -- ---------------------------------------------------------------------
-
--- 3a. Create a draft quote (from a lead and/or an existing customer) + items.
 create or replace function public.create_quote_with_items(
   p_lead_id         uuid        default null,
   p_customer_id     uuid        default null,
@@ -217,6 +258,11 @@ begin
       from public.leads where id = p_lead_id;
     if v_lead_company is null then raise exception 'Lead not found'; end if;
     if v_lead_company <> v_company then raise exception 'Lead does not belong to your company'; end if;
+    -- Reject a customer that contradicts the lead's existing customer.
+    if v_lead_customer is not null and p_customer_id is not null
+       and p_customer_id <> v_lead_customer then
+      raise exception 'Provided customer does not match the lead''s customer';
+    end if;
     if v_customer is null then v_customer := v_lead_customer; end if;
   end if;
 
@@ -260,7 +306,6 @@ begin
 end;
 $$;
 
--- 3b. Update a DRAFT quote + atomically replace its line items.
 create or replace function public.update_draft_quote_with_items(
   p_quote_id        uuid,
   p_hourly_rate     numeric     default null,
@@ -280,9 +325,9 @@ security definer
 set search_path = public, pg_temp
 as $$
 declare
-  v_company   uuid := public._require_quote_mutator();
-  v_qc        uuid;
-  v_status    text;
+  v_company uuid := public._require_quote_mutator();
+  v_qc      uuid;
+  v_status  text;
 begin
   perform public._assert_quote_scalars(
     p_hourly_rate, p_estimated_hours, p_travel_fee, p_packing_fee,
@@ -327,7 +372,6 @@ begin
 end;
 $$;
 
--- 3c. Duplicate any quote as a new DRAFT (fresh number, cleared timestamps).
 create or replace function public.duplicate_quote(p_quote_id uuid)
 returns json
 language plpgsql
@@ -369,103 +413,71 @@ begin
 end;
 $$;
 
--- 3d. Mark Sent (draft -> sent; idempotent on sent/viewed).
 create or replace function public.mark_quote_sent(p_quote_id uuid)
 returns json
 language plpgsql
 security definer
 set search_path = public, pg_temp
 as $$
-declare
-  v_company uuid := public._require_quote_mutator();
-  v_qc      uuid;
-  v_status  text;
+declare v_company uuid := public._require_quote_mutator(); v_qc uuid; v_status text;
 begin
-  select company_id, status::text into v_qc, v_status
-    from public.quotes where id = p_quote_id;
+  select company_id, status::text into v_qc, v_status from public.quotes where id = p_quote_id;
   if v_qc is null then raise exception 'Quote not found'; end if;
   if v_qc <> v_company then raise exception 'Quote does not belong to your company'; end if;
-
   if v_status = 'draft' then
-    update public.quotes
-       set status = 'sent', sent_at = coalesce(sent_at, now()), updated_at = now()
-     where id = p_quote_id;
-  elsif v_status in ('sent','viewed') then
-    null; -- idempotent no-op
-  else
-    raise exception 'Cannot send a quote in status %', v_status;
-  end if;
-
+    update public.quotes set status = 'sent', sent_at = coalesce(sent_at, now()), updated_at = now() where id = p_quote_id;
+  elsif v_status in ('sent','viewed') then null;
+  else raise exception 'Cannot send a quote in status %', v_status; end if;
   return json_build_object('quote_id', p_quote_id, 'status',
     (select status::text from public.quotes where id = p_quote_id));
 end;
 $$;
 
--- 3e. Expire (draft/sent/viewed -> expired; idempotent on expired).
 create or replace function public.expire_quote(p_quote_id uuid)
 returns json
 language plpgsql
 security definer
 set search_path = public, pg_temp
 as $$
-declare
-  v_company uuid := public._require_quote_mutator();
-  v_qc      uuid;
-  v_status  text;
+declare v_company uuid := public._require_quote_mutator(); v_qc uuid; v_status text;
 begin
-  select company_id, status::text into v_qc, v_status
-    from public.quotes where id = p_quote_id;
+  select company_id, status::text into v_qc, v_status from public.quotes where id = p_quote_id;
   if v_qc is null then raise exception 'Quote not found'; end if;
   if v_qc <> v_company then raise exception 'Quote does not belong to your company'; end if;
-
-  if v_status = 'expired' then
-    null;
+  if v_status = 'expired' then null;
   elsif v_status in ('draft','sent','viewed') then
     update public.quotes set status = 'expired', updated_at = now() where id = p_quote_id;
-  else
-    raise exception 'Cannot expire a quote in status %', v_status;
-  end if;
-
+  else raise exception 'Cannot expire a quote in status %', v_status; end if;
   return json_build_object('quote_id', p_quote_id, 'status', 'expired');
 end;
 $$;
 
--- 3f. Cancel (any non-converted -> cancelled; idempotent on cancelled).
 create or replace function public.cancel_quote(p_quote_id uuid)
 returns json
 language plpgsql
 security definer
 set search_path = public, pg_temp
 as $$
-declare
-  v_company uuid := public._require_quote_mutator();
-  v_qc      uuid;
-  v_status  text;
+declare v_company uuid := public._require_quote_mutator(); v_qc uuid; v_status text;
 begin
-  select company_id, status::text into v_qc, v_status
-    from public.quotes where id = p_quote_id;
+  select company_id, status::text into v_qc, v_status from public.quotes where id = p_quote_id;
   if v_qc is null then raise exception 'Quote not found'; end if;
   if v_qc <> v_company then raise exception 'Quote does not belong to your company'; end if;
-
-  if v_status = 'cancelled' then
-    null;
-  elsif v_status = 'converted' then
-    raise exception 'Cannot cancel a converted quote';
-  else
-    update public.quotes set status = 'cancelled', updated_at = now() where id = p_quote_id;
-  end if;
-
+  if v_status = 'cancelled' then null;
+  elsif v_status = 'converted' then raise exception 'Cannot cancel a converted quote';
+  else update public.quotes set status = 'cancelled', updated_at = now() where id = p_quote_id; end if;
   return json_build_object('quote_id', p_quote_id, 'status', 'cancelled');
 end;
 $$;
 
 -- ---------------------------------------------------------------------
--- 4. EXECUTE GRANTS — clients get the 6 public RPCs only; helpers internal.
+-- 4. EXECUTE GRANTS — clients get the 6 client RPCs only.
+--    PUBLIC + anon: nothing. Helpers + validators: internal only.
 -- ---------------------------------------------------------------------
-revoke execute on function public._require_quote_mutator()                                              from public, anon, authenticated;
-revoke execute on function public._compute_quote_totals(uuid)                                           from public, anon, authenticated;
 revoke execute on function public._assert_quote_scalars(numeric,numeric,numeric,numeric,numeric,numeric,numeric,numeric) from public, anon, authenticated;
 revoke execute on function public._assert_quote_line_items(jsonb)                                       from public, anon, authenticated;
+revoke execute on function public._require_quote_mutator()                                              from public, anon, authenticated;
+revoke execute on function public._compute_quote_totals(uuid)                                           from public, anon, authenticated;
 
 revoke execute on function public.create_quote_with_items(uuid,uuid,numeric,numeric,numeric,numeric,numeric,numeric,numeric,numeric,timestamptz,jsonb) from public, anon;
 revoke execute on function public.update_draft_quote_with_items(uuid,numeric,numeric,numeric,numeric,numeric,numeric,numeric,numeric,timestamptz,jsonb) from public, anon;
