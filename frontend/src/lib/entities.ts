@@ -1,7 +1,7 @@
 // Defensive display accessors — the live mvp-dashboard payload nests customer
 // info under a `customers` (plural) object and uses varying field names.
 
-import type { Job, Lead, Quote } from "./types";
+import type { Job, Quote } from "./types";
 
 type AnyObj = Record<string, unknown>;
 
@@ -42,7 +42,7 @@ function displayName(o: AnyObj, fallback: string): string {
   );
 }
 
-export function leadName(lead: Lead): string {
+export function leadName(lead: AnyObj): string {
   return displayName(lead as AnyObj, "Unnamed lead");
 }
 export function quoteCustomer(quote: Quote): string {
@@ -59,7 +59,7 @@ export function contactPhone(o: AnyObj): string | undefined {
   return str(o.phone) || str(customerObj(o)?.phone);
 }
 
-export function leadVolume(lead: Lead): string {
+export function leadVolume(lead: AnyObj): string {
   const o = lead as AnyObj;
   const v =
     o.estimated_volume_cuft ?? o.estimated_volume ?? o.estimated_cubic_feet;
