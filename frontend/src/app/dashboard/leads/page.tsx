@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Search, Plus, StickyNote, MapPin } from "lucide-react";
 import { useDashboardData } from "@/components/data/DashboardProvider";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -241,6 +241,7 @@ function NewLeadDrawer({
   const toast = useToast();
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
 
   useEffect(() => {
     if (open) setForm(EMPTY_FORM);
@@ -251,7 +252,9 @@ function NewLeadDrawer({
   }
 
   async function submit() {
-    if (saving) return; // guard against duplicate submissions
+    // Synchronous ref guard: blocks duplicate invocations that fire faster
+    // than React can re-render the disabled/loading button state.
+    if (savingRef.current) return;
     if (!canWrite) {
       toast("No company associated with your account.", "error");
       return;
@@ -260,6 +263,7 @@ function NewLeadDrawer({
       toast("Customer first and last name are required.", "error");
       return;
     }
+    savingRef.current = true;
     setSaving(true);
     try {
       // Atomic: single RPC creates customer + lead in one transaction.
@@ -280,6 +284,7 @@ function NewLeadDrawer({
     } catch (e) {
       toast(e instanceof Error ? e.message : "Could not create lead.", "error");
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   }

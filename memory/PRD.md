@@ -115,9 +115,11 @@ returned read-only verification JSON for each. All verified.
   mode only (was unconditional 6, blocked short legacy passwords). Verified iteration_4 (4/4).
 
 ## KNOWN LIMITATIONS / BACKLOG (post-Phase 3)
-- **P1 orphan risk:** New Lead does TWO client writes (createCustomer then createLead);
-  not transactional. Draft fix authored (0009_create_lead_with_customer.sql — atomic
-  SECURITY DEFINER RPC) but NOT yet applied; frontend still uses the two-write path.
+- **RESOLVED (2026-07): orphan risk** — 0009_create_lead_with_customer.sql APPLIED &
+  verified. New Lead now uses one atomic SECURITY DEFINER RPC (company_id + created_by
+  derived server-side, status hardcoded 'new', roles owner/operations_manager/dispatcher/
+  sales). Frontend two-write path removed; duplicate-submit guarded by savingRef + loading
+  button. Verified testing_agent iteration_5 (5/5).
 - **Deferred:** customer-role RLS permission test ("implemented but not fully verified").
   test-customer@example.com attached to company for that test (customer role).
 - **Next phases:** 4 Quotes, 5 Jobs/Dispatch, 6 Crew mobile, 7 Portal (verified
