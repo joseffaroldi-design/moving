@@ -23,9 +23,8 @@ create table if not exists public.lead_notes (
   constraint lead_notes_body_not_empty check (btrim(body) <> '')
 );
 
-create index if not exists lead_notes_lead_id_idx    on public.lead_notes (lead_id);
-create index if not exists lead_notes_company_id_idx on public.lead_notes (company_id);
-create index if not exists lead_notes_created_at_idx on public.lead_notes (created_at desc);
+create index if not exists lead_notes_lead_created_idx on public.lead_notes (lead_id, created_at desc);
+create index if not exists lead_notes_company_id_idx   on public.lead_notes (company_id);
 
 -- ---------------------------------------------------------------------
 -- Grants: strip anon/public; authenticated gets ONLY select + insert.
