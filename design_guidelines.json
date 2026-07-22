@@ -1,0 +1,144 @@
+{
+  "project_name": "MoveOps",
+  "theme_strategy": "Light mode primary with Dark Navy structural elements (sidebar, top nav). High-contrast data presentation. Optimized for power users requiring high information density without clutter.",
+  "color_system": {
+    "brand_navy": {
+      "DEFAULT": "#0B1527",
+      "description": "Used for sidebar background, primary heading text, and primary high-contrast buttons."
+    },
+    "slate": {
+      "900": "#0F172A",
+      "800": "#1E293B",
+      "700": "#334155",
+      "600": "#475569",
+      "500": "#64748B",
+      "400": "#94A3B8",
+      "300": "#CBD5E1",
+      "200": "#E2E8F0",
+      "100": "#F1F5F9",
+      "50": "#F8FAFC",
+      "description": "Used for borders (200), dividers (200), secondary text (500), subtle backgrounds (50)."
+    },
+    "accent_blue": {
+      "DEFAULT": "#2563EB",
+      "hover": "#1D4ED8",
+      "muted": "#EFF6FF",
+      "description": "Restrained blue for primary actions, active states, checkboxes, and text links."
+    },
+    "surface": {
+      "background": "#F1F5F9",
+      "card": "#FFFFFF",
+      "sidebar": "#0B1527"
+    }
+  },
+  "typography": {
+    "fonts": {
+      "heading": "'Chivo', sans-serif",
+      "body": "'IBM Plex Sans', sans-serif"
+    },
+    "scale": {
+      "h1": "text-2xl font-bold tracking-tight text-brand-navy",
+      "h2": "text-xl font-semibold tracking-tight text-brand-navy",
+      "h3": "text-lg font-medium text-brand-navy",
+      "body": "text-sm text-slate-700 leading-relaxed",
+      "table_data": "text-sm text-slate-900 font-medium",
+      "table_header": "text-xs font-semibold text-slate-500 uppercase tracking-wider",
+      "caption": "text-xs text-slate-500"
+    }
+  },
+  "spacing_and_layout": {
+    "density_system": "Compact Data Density",
+    "sidebar_width": "w-64 (expanded), w-16 (collapsed)",
+    "padding": {
+      "container": "p-6",
+      "card": "p-4 sm:p-5",
+      "table_cell": "px-3 py-2",
+      "mobile_crew_screen": "p-4"
+    },
+    "borders": {
+      "radius": "rounded-md (subtle, professional, not overly playful)",
+      "width": "border border-slate-200"
+    },
+    "shadows": {
+      "card": "shadow-sm",
+      "dropdown": "shadow-lg shadow-slate-200/50"
+    }
+  },
+  "status_badge_system": {
+    "styles": "px-2 py-0.5 rounded-full text-xs font-semibold uppercase tracking-wider border",
+    "variants": {
+      "new_draft_scheduled": {
+        "bg": "bg-slate-100",
+        "text": "text-slate-700",
+        "border": "border-slate-300"
+      },
+      "in_progress_contacted": {
+        "bg": "bg-blue-50",
+        "text": "text-blue-700",
+        "border": "border-blue-200"
+      },
+      "completed_won_approved_paid": {
+        "bg": "bg-emerald-50",
+        "text": "text-emerald-700",
+        "border": "border-emerald-200"
+      },
+      "lost_expired_overdue": {
+        "bg": "bg-red-50",
+        "text": "text-red-700",
+        "border": "border-red-200"
+      }
+    }
+  },
+  "components": {
+    "sidebar": {
+      "style": "bg-[#0B1527] text-slate-300 flex flex-col h-screen fixed",
+      "active_link": "bg-slate-800 text-white border-l-4 border-accent-blue",
+      "hover_link": "hover:bg-slate-800 hover:text-white transition-colors"
+    },
+    "tables": {
+      "container": "bg-white border border-slate-200 rounded-md shadow-sm overflow-hidden",
+      "header_row": "bg-slate-50 border-b border-slate-200",
+      "row": "border-b border-slate-100 hover:bg-slate-50 transition-colors group",
+      "cell": "px-3 py-2 whitespace-nowrap text-sm",
+      "actions": "opacity-0 group-hover:opacity-100 transition-opacity"
+    },
+    "cards_kpi": {
+      "style": "bg-white p-4 rounded-md border border-slate-200 shadow-sm flex flex-col justify-between",
+      "value": "text-2xl font-bold text-brand-navy",
+      "label": "text-sm text-slate-500 font-medium"
+    },
+    "dispatch_board": {
+      "layout": "List-based dense timeline. NOT drag-and-drop. Rows represent trucks/crews, columns represent time blocks or current jobs. High contrast status badges."
+    },
+    "mobile_crew_app": {
+      "layout": "Bottom navigation bar, large touch targets (min 44px height). High contrast.",
+      "buttons": "w-full py-3 rounded-md text-base font-semibold",
+      "primary_action": "bg-brand-navy text-white active:bg-slate-800",
+      "checklist_item": "flex items-center gap-3 p-4 border-b border-slate-200 active:bg-slate-50"
+    }
+  },
+  "images": [
+    {
+      "category": "auth_background",
+      "url": "https://images.pexels.com/photos/33897865/pexels-photo-33897865.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "description": "Professional moving truck on coastal road, used as a high-quality background for the login/auth split screen."
+    },
+    {
+      "category": "crew_avatar_placeholder",
+      "url": "https://images.pexels.com/photos/7464401/pexels-photo-7464401.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "description": "Moving company crew workers, can be cropped for profile avatars in the dispatch board."
+    }
+  ],
+  "UNIVERSAL_GUIDELINES_FOR_MAIN_AGENT": [
+    "You tend to converge toward generic, 'on distribution' outputs. Avoid oversized padding (like p-8 in data tables) and massive text. This is a B2B Operations tool—optimize for data density.",
+    "Do NOT use generic AI illustrations or empty marketing copy. Use real-world demo data (e.g., '123 Main St, Springfield', 'Quote #Q-10492', 'Crew Alpha').",
+    "Avoid glassmorphism. Use flat, solid backgrounds with subtle 1px borders (Swiss Brutalist / Utility style) to convey structural rigidity and precision.",
+    "Do NOT center-align lists, tables, or forms. Left-align for reading efficiency.",
+    "Ensure all interactive elements (buttons, rows, links) have distinct hover AND focus states.",
+    "Implement loading skeletons for tables and metric cards. No spinning loaders full screen.",
+    "All interactive and key informational elements MUST include a data-testid attribute.",
+    "Do NOT use default Inter or Roboto fonts. Implement IBM Plex Sans for body/data and Chivo for headings via next/font/google.",
+    "Use Lucide-react for all icons with consistent sizing (w-4 h-4 for inline, w-5 h-5 for sidebar).",
+    "Mobile views must hide complex tables and replace them with stacked cards, prioritizing large touch targets for crew members."
+  ]
+}
