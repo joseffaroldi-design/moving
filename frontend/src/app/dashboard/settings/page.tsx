@@ -30,14 +30,27 @@ export default function SettingsPage() {
   const [fromDb, setFromDb] = useState(false);
   const [profile, setProfile] = useState<BusinessProfile>(FALLBACK_PROFILE);
 
+  // Resolve the signed-in user's company_id (never an arbitrary global row).
+  const companyId =
+    (me?.profile as { company_id?: string } | null)?.company_id ??
+    (me?.company as { id?: string } | null)?.id ??
+    data?.company?.id ??
+    null;
+
   useEffect(() => {
-    fetchBusinessProfile()
+    let active = true;
+    setLoading(true);
+    fetchBusinessProfile(companyId)
       .then(({ profile, fromDb }) => {
+        if (!active) return;
         setProfile(profile);
         setFromDb(fromDb);
       })
-      .finally(() => setLoading(false));
-  }, []);
+      .finally(() => active && setLoading(false));
+    return () => {
+      active = false;
+    };
+  }, [companyId]);
 
   function set<K extends keyof BusinessProfile>(key: K, value: BusinessProfile[K]) {
     setProfile((p) => ({ ...p, [key]: value }));
@@ -48,9 +61,13 @@ export default function SettingsPage() {
       toast("Business name is required.", "error");
       return;
     }
+    if (!companyId) {
+      toast("No company is associated with your account.", "error");
+      return;
+    }
     setSaving(true);
     try {
-      const saved = await saveBusinessProfile(profile);
+      const saved = await saveBusinessProfile(profile, companyId);
       setProfile(saved);
       setFromDb(true);
       toast("Business profile saved.", "success");

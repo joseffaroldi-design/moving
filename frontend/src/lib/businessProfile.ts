@@ -3,6 +3,7 @@ import { BRAND } from "@/lib/brand";
 
 export interface BusinessProfile {
   id?: string;
+  company_id?: string;
   business_name: string;
   logo_url?: string | null;
   phone: string;
@@ -35,18 +36,18 @@ export const FALLBACK_PROFILE: BusinessProfile = {
   default_deposit_percentage: 25,
 };
 
-// Returns the saved profile, or the brand.ts fallback if the table is missing/empty.
-export async function fetchBusinessProfile(): Promise<{
-  profile: BusinessProfile;
-  fromDb: boolean;
-}> {
+// Loads the signed-in user's COMPANY profile (RLS-scoped by company_id).
+// Falls back to brand.ts defaults if there is no company or no saved row.
+export async function fetchBusinessProfile(
+  companyId?: string | null
+): Promise<{ profile: BusinessProfile; fromDb: boolean }> {
+  if (!companyId) return { profile: FALLBACK_PROFILE, fromDb: false };
   try {
     const supabase = getBrowserClient();
     const { data, error } = await supabase
       .from("business_profile")
       .select("*")
-      .order("updated_at", { ascending: false })
-      .limit(1)
+      .eq("company_id", companyId)
       .maybeSingle();
     if (error || !data) return { profile: FALLBACK_PROFILE, fromDb: false };
     return { profile: data as BusinessProfile, fromDb: true };
@@ -55,11 +56,15 @@ export async function fetchBusinessProfile(): Promise<{
   }
 }
 
+// Inserts/updates the profile for the given company. RLS (can_manage_company)
+// enforces that only an owner/ops-manager of that company may write.
 export async function saveBusinessProfile(
-  profile: BusinessProfile
+  profile: BusinessProfile,
+  companyId: string
 ): Promise<BusinessProfile> {
+  if (!companyId) throw new Error("No company is associated with your account.");
   const supabase = getBrowserClient();
-  const payload = { ...profile };
+  const payload = { ...profile, company_id: companyId };
   let res;
   if (profile.id) {
     res = await supabase
