@@ -1,0 +1,37 @@
+{
+  "summary": "Phase 3 (RLS-scoped Supabase writes for Leads and Customers) end-to-end verified from the QA owner account. All 8 acceptance criteria + 15 individual assertions PASS on the live preview. Login as qa-owner@example.com/1234 landed on /dashboard; /dashboard/leads loaded from Supabase without errors; New Lead drawer created customer+lead pair (client-side two-write, non-atomic per known limitation) and showed 'Lead created.' toast with 'ZZTEST Lead-0722' at lead-row-0 status New; row persisted after full page reload; lead detail drawer status select changed New -> Contacted with 'Status updated.' toast and status persists after reload; note added via note-body-input + add-note-button showed 'Note added.', appeared in lead-notes-list, and persists after reload; New Customer on /dashboard/customers created 'ZZTEST Cust-0722' with 'Customer created.' and persisted; Edit Customer changed phone to 5045559999 with 'Customer updated.' and (504) 555-9999 persists after reload. Left ZZTEST records in DB for user cleanup per instructions.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "LoginPage",
+        "issue": "Password field enforces HTML5 minLength=6 in BOTH login and signup modes. QA owner account uses a 4-char password '1234', which the browser blocks with a native 'Please lengthen this text to 6 characters' bubble BEFORE the request is sent. Only bypassed in testing by removing the attribute via page.evaluate. Real end users with existing short passwords (or QA teams) cannot sign in.",
+        "selector": "[data-testid=\"login-password\"]",
+        "priority": "MEDIUM"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "LoginPage: apply minLength=6 only in signup mode (mode === 'signup'), not in login mode, so users with pre-existing short passwords (like the QA owner '1234') can sign in. Suggestion: `minLength={mode === 'signup' ? 6 : undefined}` on the password Input.",
+    "Optional: New Lead currently performs two separate client writes (createCustomer then createLead). Per instructions this is a known limitation — consider wrapping in a Postgres RPC/transaction so a failed createLead does not orphan a customer row."
+  ],
+  "critical_code_review_comments": [
+    "leads/page.tsx NewLeadDrawer.submit() uses two separate Supabase writes (customers.insert then leads.insert). If the second call fails (RLS, network, validation), the first customer row is orphaned with no rollback. Not tested against failure paths, but the risk is documented as a known limitation. A single Postgres RPC (create_lead_with_customer) would fix it.",
+    "leads/page.tsx line 77 useCallback deps include full `data` object — will re-run load() every time DashboardProvider data changes even when companyId hasn't changed. Consider `data?.recentLeads` only.",
+    "leads/page.tsx LeadDetailDrawer.postNote() reads lead.company_id ?? companyId — fine, but if the lead record is missing company_id (older seed rows) it silently falls back; RLS will enforce, but a clearer error path is preferable.",
+    "login/page.tsx: minLength=6 is applied unconditionally. In sign-in mode the frontend should never validate legacy password lengths — Supabase's auth endpoint owns that policy.",
+    "customers/page.tsx line 122 ErrorState uses onRetry={load} — good pattern; leads/page.tsx already mirrors this.",
+    "Both pages read companyId from `(me?.profile as { company_id?: string })?.company_id`. If a user's profile row is missing, canWrite becomes false and the New buttons are disabled without any user-visible reason (only a tooltip). Consider surfacing a small banner 'No company linked to your account — contact an admin.' when me is loaded but companyId is null."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend-only test)", "frontend": "100% (15/15 checks pass)"},
+  "test_credentials": "qa-owner@example.com / 1234 (from review request). NOTE: login form's HTML5 minLength=6 constraint blocks the password unless bypassed; see MEDIUM ui_bug above.",
+  "seed_data_creation": "Created live in Supabase (left in place for user SQL cleanup per instructions): 1 customer 'ZZTEST Lead-0722' (zztest.lead@example.com, (504)555-0100), 1 lead attached to that customer with status=Contacted and 1 note 'QA test note phase 3.', 1 customer 'ZZTEST Cust-0722' (zztest.cust@example.com, (504)555-9999 after edit).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Phase 3 (Leads + Customers Supabase writes with RLS) is fully verified. QA owner qa-owner@example.com password '1234' works, BUT the login form's minLength=6 blocks the password natively; either lengthen the QA password to >=6 chars or relax minLength in login mode. When writing playwright tests against this login page, remove the minlength attr first: `await page.evaluate('document.querySelector(\"[data-testid=login-password]\").removeAttribute(\"minlength\")')`. ZZTEST records left in DB — user will delete via SQL. Preview URL: https://ops-preview-7.preview.emergentagent.com. All testids from the review request work as documented (new-lead-button, submit-new-lead, lead-first-name/last-name/email/phone/source/move-date/origin/destination/bedrooms/volume/notes-input, leads-table, lead-row-0, lead-status-select, note-body-input, add-note-button, lead-notes-list, new-customer-button, submit-customer, customer-first-name/last-name/email/phone, customers-table, customer-row-N, edit-customer-N).",
+  "rca of the issue": "MEDIUM issue: LoginPage password Input has `minLength={6}` unconditionally (login/page.tsx line 102). This is a client-side HTML5 constraint that prevents submitting the QA owner 4-char password. Reproduction: 1) go to /login, 2) enter qa-owner@example.com / 1234, 3) click Sign in — browser shows native 'Please lengthen this text to 6 characters or more' popover and blocks submit; no request is sent to Supabase, no [data-testid=login-error] is populated. Fix: change to `minLength={mode === 'signup' ? 6 : undefined}` so the constraint only applies to new-account creation; Supabase already owns password policy for existing accounts. Mitigation used in this test run: removed the minlength attribute in the browser via page.evaluate before filling the field."
+}
