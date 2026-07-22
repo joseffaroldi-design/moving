@@ -128,3 +128,63 @@ returned read-only verification JSON for each. All verified.
   lead actions).
 - **Credentials:** owner password NOT stored anywhere (user policy). qa-owner throwaway
   account (role owner) used only for automated testing — user to delete after.
+
+## Phase 4 — Quotes (2026-07, IN PROGRESS)
+Strict workflow: agent authors additive SQL → user runs manually in Supabase →
+returns read-only verification JSON → then frontend wired. Owner tests manually.
+
+### Backend migrations
+- **0011_quotes_grant_lockdown.sql — APPLIED & VERIFIED.** anon/PUBLIC stripped of ALL
+  on quotes + quote_line_items; authenticated reduced to SELECT only (no INSERT/UPDATE/
+  DELETE/TRUNCATE/TRIGGER/REFERENCES). Dropped all old policies (broad company_select,
+  member_select, unsafe customer_self_select, FOR ALL sales_write). RLS enabled+forced.
+  Added staff-only SELECT policies {owner,operations_manager,dispatcher,sales}. 2 rows intact.
+- **0012_quote_status_enum_extend.sql — APPLIED & VERIFIED.** quote_status now:
+  draft, sent, accepted, rejected, expired, viewed, converted, cancelled. Canonical
+  accepted/rejected preserved (UI maps → Approved/Declined). Isolated migration (enum
+  values can't be used in same tx that adds them).
+- **0013_quote_number_generation.sql — APPLIED & VERIFIED.** next_quote_number(company)
+  SECURITY DEFINER, advisory-xact-lock per company, format 'Q-0001', EXECUTE owner-only.
+  Legacy numbers are 'Q-<hex>' → excluded by '^Q-[0-9]+$' filter, no collision.
+- **0014_quote_pricing_and_mutation_rpcs.sql — AUTHORED, DEFERRED (NOT applied yet).**
+  Adds columns tax_rate, deposit_percent, deposit_amount (numeric default 0). Adds
+  helpers _require_quote_mutator, _compute_quote_totals, _assert_quote_scalars,
+  _assert_quote_line_items (all internal, EXECUTE revoked from clients). Adds 6 client
+  RPCs (authenticated EXECUTE): create_quote_with_items, update_draft_quote_with_items,
+  duplicate_quote, mark_quote_sent, expire_quote, cancel_quote. Mutate roles
+  {owner,operations_manager,sales}; dispatcher read-only. Server-authoritative pricing
+  (percent /100). File saved at /app/supabase/migrations/0014_...sql with verification
+  query in-thread. **User deferred applying it to build frontend first.**
+
+### Pricing model (authoritative — server; UI preview mirrors it)
+labor=round(hourly_rate*estimated_hours,2); line_items=round(Σ qty*unit_price,2);
+gross_subtotal=round(labor+line_items+travel+packing+materials,2);
+discounted=round(greatest(gross-discount,0),2); tax=round(discounted*tax_rate/100,2);
+total=round(greatest(discounted+tax,0),2); deposit_amount=round(total*deposit_percent/100,2).
+Stored subtotal=gross_subtotal. Labor is scalar-only (UI must not add labor line item).
+
+### Frontend (BUILT, build-verified; authenticated visual test pending owner login)
+- `src/lib/quotes.ts`: typed service layer — fetchQuotes, fetchQuoteLineItems,
+  computeQuoteTotalsPreview (preview only), quoteStatusLabel, and RPC wrappers whose
+  names/args mirror 0014 EXACTLY. Gate `QUOTES_WRITE_ENABLED=false` (flip to true only
+  after 0014 applied+verified). BACKEND_REQUIRED_MSG constant.
+- `src/app/dashboard/quotes/page.tsx` (rewritten): authenticated list (real fetchQuotes,
+  RLS), search + status filter, table + mobile cards, amber "Backend setup required"
+  banner. Quote Builder drawer (create from customer OR lead; edit draft; line-item
+  editor add/remove; labor/fees/discount/tax%/deposit% inputs; LIVE preview totals).
+  Detail drawer: pricing breakdown, line items, mapped status badge, PDF link, and
+  Edit/Duplicate/Send/Expire/Cancel controls — ALL disabled + labeled until 0014.
+  "To Job" disabled (Phase 5). No mocked success toasts; no direct table writes.
+- `src/components/ui/status-badge.tsx`: added optional `label` prop (tone from raw status).
+- `src/app/print/quote/[id]/page.tsx`: PDF now loads via AUTHENTICATED server-side
+  Supabase read (session cookies, RLS staff) + line items — NO mvp-dashboard payload.
+- `src/components/print/QuoteDocument.tsx`: line items show qty×unit; deposit row; status
+  label mapped (Approved/Declined).
+- Type check PASS, production build PASS (25 routes). Lint: ESLint not configured in repo.
+
+### Remaining after 0014 applied+verified
+1. Flip `QUOTES_WRITE_ENABLED` → true in src/lib/quotes.ts.
+2. Test end-to-end (create/edit/duplicate/send/expire/cancel) — owner manual or approved
+   least-privilege temp sales account (NOT a 2nd owner).
+3. Then Phase 4 remainder: 0015 approval tokens (customer view/approve/decline), 0016
+   quote→job conversion handoff (Phase 5).

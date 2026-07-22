@@ -1,10 +1,14 @@
-import { getDashboard } from "@/lib/api";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { QuoteDocument } from "@/components/print/QuoteDocument";
 import { PrintBar } from "@/components/print/PrintBar";
 import type { Quote } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
+// Loads a saved quote + line items via an AUTHENTICATED, RLS-scoped staff read
+// (server-side Supabase using the request session cookies). This does NOT use
+// the public mvp-dashboard payload. A future secure customer token path (0015)
+// will provide customer-facing access without staff privileges.
 export default async function QuotePrintPage({
   params,
 }: {
@@ -13,8 +17,20 @@ export default async function QuotePrintPage({
   const { id } = await params;
   let quote: Quote | undefined;
   try {
-    const data = await getDashboard();
-    quote = data.recentQuotes.find((q) => String(q.id) === id);
+    const supabase = await createSupabaseServerClient();
+    const { data: q } = await supabase
+      .from("quotes")
+      .select("*, customers(id, first_name, last_name, email, phone)")
+      .eq("id", id)
+      .maybeSingle();
+    if (q) {
+      const { data: items } = await supabase
+        .from("quote_line_items")
+        .select("*")
+        .eq("quote_id", id)
+        .order("sort_order", { ascending: true });
+      quote = { ...(q as Record<string, unknown>), quote_line_items: items ?? [] } as unknown as Quote;
+    }
   } catch {
     quote = undefined;
   }
@@ -29,8 +45,11 @@ export default async function QuotePrintPage({
           </div>
         ) : (
           <div className="mx-auto max-w-md rounded-md border border-slate-200 bg-white p-8 text-center">
-            <p className="font-serif text-lg font-bold text-navy">Quote not found</p>
-            <p className="mt-1 text-sm text-muted">This quote may require an authenticated session to load.</p>
+            <p className="font-serif text-lg font-bold text-navy">Quote not available</p>
+            <p className="mt-1 text-sm text-muted">
+              This quote could not be loaded. It may not exist, or you may need to be signed in as
+              staff of the owning company to view it.
+            </p>
           </div>
         )}
       </div>

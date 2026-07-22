@@ -2,6 +2,7 @@ import { CrescentMark } from "@/components/brand/Logo";
 import { BRAND } from "@/lib/brand";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { quoteCustomer, addr, contactEmail, contactPhone } from "@/lib/entities";
+import { quoteStatusLabel } from "@/lib/quotes";
 import type { Quote } from "@/lib/types";
 
 function Line({ label, value }: { label: string; value: string }) {
@@ -53,7 +54,7 @@ export function QuoteDocument({ quote }: { quote: Quote }) {
         <div className="text-right text-[13px]">
           <Line label="Issued" value={formatDate(quote.created_at as string)} />
           <Line label="Expires" value={formatDate((quote.expires_at || quote.expiration_date) as string)} />
-          <Line label="Status" value={String(quote.status ?? "—").toUpperCase()} />
+          <Line label="Status" value={quoteStatusLabel(quote.status as string)} />
         </div>
       </div>
 
@@ -85,16 +86,35 @@ export function QuoteDocument({ quote }: { quote: Quote }) {
               </span>
             </div>
           ))}
-          {lineItems.map((li, i) => (
-            <div key={`li-${i}`} className="flex justify-between border-t border-slate-100 px-3 py-2 text-[13px]">
-              <span className="text-slate-600">{String(li.description ?? li.name ?? "Item")}</span>
-              <span className="font-medium text-navy">{formatCurrency((li.amount ?? li.total ?? li.price) as number)}</span>
-            </div>
-          ))}
+          {lineItems.map((li, i) => {
+            const qty = li.quantity as number | undefined;
+            const unit = li.unit_price as number | undefined;
+            return (
+              <div key={`li-${i}`} className="flex justify-between border-t border-slate-100 px-3 py-2 text-[13px]">
+                <span className="text-slate-600">
+                  {String(li.description ?? li.name ?? "Item")}
+                  {qty !== undefined && unit !== undefined && (
+                    <span className="ml-1 text-[11px] text-slate-400">
+                      ({qty} × {formatCurrency(unit)})
+                    </span>
+                  )}
+                </span>
+                <span className="font-medium text-navy">
+                  {formatCurrency((li.amount ?? li.total ?? li.price) as number)}
+                </span>
+              </div>
+            );
+          })}
           <div className="flex justify-between border-t-2 border-navy bg-navy px-3 py-2.5 text-sm font-bold text-white">
             <span>Total</span>
             <span>{formatCurrency(quote.total ?? quote.subtotal)}</span>
           </div>
+          {(quote.deposit_amount as number) ? (
+            <div className="flex justify-between px-3 py-2 text-[12px] text-slate-600">
+              <span>Deposit due{quote.deposit_percent ? ` (${quote.deposit_percent}%)` : ""}</span>
+              <span className="font-medium text-navy">{formatCurrency(quote.deposit_amount as number)}</span>
+            </div>
+          ) : null}
         </div>
       </div>
 

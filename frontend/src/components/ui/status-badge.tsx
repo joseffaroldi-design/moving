@@ -7,11 +7,13 @@ export function StatusBadge({
   status,
   tone,
   className,
+  label,
   "data-testid": testId,
 }: {
   status: string | null | undefined;
   tone?: BadgeTone;
   className?: string;
+  label?: string;
   "data-testid"?: string;
 }) {
   const resolved = tone ?? statusTone(status);
@@ -24,7 +26,7 @@ export function StatusBadge({
         className
       )}
     >
-      {titleCase(status) || "—"}
+      {label ?? titleCase(status) ?? "—"}
     </span>
   );
 }
