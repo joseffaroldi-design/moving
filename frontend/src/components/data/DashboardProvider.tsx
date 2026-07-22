@@ -13,10 +13,20 @@ interface DashboardCtx {
 
 const Ctx = createContext<DashboardCtx | undefined>(undefined);
 
-export function DashboardProvider({ children }: { children: React.ReactNode }) {
-  const [data, setData] = useState<NormalizedDashboard | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+export function DashboardProvider({
+  children,
+  initialData = null,
+  initialError = null,
+  autoFetch = true,
+}: {
+  children: React.ReactNode;
+  initialData?: NormalizedDashboard | null;
+  initialError?: string | null;
+  autoFetch?: boolean;
+}) {
+  const [data, setData] = useState<NormalizedDashboard | null>(initialData);
+  const [loading, setLoading] = useState(!initialData && !initialError && autoFetch);
+  const [error, setError] = useState<string | null>(initialError);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -28,8 +38,9 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    // Only fetch on the client if the server didn't already provide data.
+    if (!initialData && !initialError && autoFetch) load();
+  }, [initialData, initialError, autoFetch, load]);
 
   return (
     <Ctx.Provider value={{ data, loading, error, refetch: load }}>

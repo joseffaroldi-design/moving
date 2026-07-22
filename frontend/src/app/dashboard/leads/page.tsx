@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/drawer";
 import { useToast } from "@/components/ui/toast";
 import { formatDate, titleCase } from "@/lib/format";
-import { leadName, addr } from "@/lib/entities";
+import { leadName, addr, leadVolume, contactEmail, contactPhone } from "@/lib/entities";
 import type { Lead } from "@/lib/types";
 
 export default function LeadsPage() {
@@ -129,9 +129,7 @@ export default function LeadsPage() {
                     <Td>{formatDate(lead.move_date as string)}</Td>
                     <Td>{titleCase((lead.source || lead.lead_source) as string)}</Td>
                     <Td>
-                      {lead.estimated_volume || lead.estimated_cubic_feet
-                        ? `${lead.estimated_volume ?? lead.estimated_cubic_feet} cu ft`
-                        : "—"}
+                      {leadVolume(lead)}
                     </Td>
                     <Td><StatusBadge status={lead.status as string} /></Td>
                   </Tr>
@@ -190,19 +188,12 @@ export default function LeadsPage() {
                 Created {formatDate(selected.created_at as string)}
               </span>
             </div>
-            <DetailRow label="Email" value={(selected.email as string) || "—"} />
-            <DetailRow label="Phone" value={(selected.phone as string) || "—"} />
+            <DetailRow label="Email" value={contactEmail(selected) || "—"} />
+            <DetailRow label="Phone" value={contactPhone(selected) || "—"} />
             <DetailRow label="Origin" value={addr(selected, "origin")} />
             <DetailRow label="Destination" value={addr(selected, "destination")} />
             <DetailRow label="Move Date" value={formatDate(selected.move_date as string)} />
-            <DetailRow
-              label="Estimated Volume"
-              value={
-                selected.estimated_volume || selected.estimated_cubic_feet
-                  ? `${selected.estimated_volume ?? selected.estimated_cubic_feet} cu ft`
-                  : "—"
-              }
-            />
+            <DetailRow label="Estimated Volume" value={leadVolume(selected)} />
             <DetailRow label="Source" value={titleCase((selected.source || selected.lead_source) as string)} />
           </div>
         )}

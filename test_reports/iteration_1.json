@@ -1,0 +1,31 @@
+{
+  "summary": "First-run frontend-only verification of MoveOps milestone 1 (public mvp-dashboard demo). All acceptance criteria pass: landing renders, dashboard shows real seeded stat counts (Customers=5, Leads=5, Quotes=2, Jobs=1, Dispatch=1, Trucks=3) with Recent Leads (Alicia/Brandon/Carla/Derek/Emily), Recent Quotes (Q-C7660287 $1,560.00 SENT; Q-03FA05A7 $2,120.00 ACCEPTED), and Upcoming Job JOB-DEMO-001. No perpetual loading skeletons. All 9 sidebar nav items navigate correctly (initial timing false-positives resolved by using wait_for_url). Leads/Customers/Quotes/Jobs/Dispatch pages all render seeded rows with correct columns and open working detail drawers. Login and forgot-password forms render with required-field validation. Mobile viewport swaps to lead-card layout and mobile-menu-button opens sidebar drawer.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/dashboard/dispatch", "issues": ["Fleet panel shows placeholder text 'Fleet list unavailable — Truck details load on the authenticated dispatch view.' even though the public mvp-dashboard endpoint returns 3 trucks in payload. Fleet count header correctly shows (3), so requirement is met, but individual truck details (Truck 1 - 26ft, etc.) are only visible inside the assigned run card, not in the Fleet section. Minor UX polish: could list the 3 trucks from the seeded payload."]},
+      {"screen": "/forgot-password", "issues": ["Page uses a centered card layout while /login uses split-screen. Not a spec violation (requirement only said 'renders'), just an inconsistency worth noting."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "OPTIONAL polish: populate the Fleet (3) panel on /dashboard/dispatch with the 3 seeded trucks from the public payload (data.trucks) instead of the 'authenticated dispatch view' placeholder.",
+    "No blockers — milestone 1 is verified."
+  ],
+  "critical_code_review_comments": [
+    "getDashboard() in /app/frontend/src/lib/api.ts sends the SUPABASE publishable key as Bearer when no user token is present — acceptable for a public Edge Function but ensure the endpoint enforces RLS/anon-safety server-side.",
+    "normalize.ts is defensive against key drift (good). The counts fallback to array length if no explicit count is provided, which is correct against the current payload.",
+    "AppShell.tsx testid derives from label.toLowerCase() — safe as long as labels remain unique single-words; add a defensive slug function if labels ever contain spaces.",
+    "Dispatch page hard-codes the 'Fleet list unavailable' fallback even when trucks are present in the normalized payload — consider rendering `dashboard.trucks` when the length > 0."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped per request)", "frontend": "100%"},
+  "test_credentials": "No auth credentials required for this milestone — /dashboard is publicly accessible via the mvp-dashboard Edge Function. No seeded auth user, so login was NOT attempted (per instructions).",
+  "seed_data_creation": "None — used the pre-seeded MoveOps Demo Company data returned by the public mvp-dashboard Supabase Edge Function.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Milestone 1 (public demo data render + navigation) is fully verified. Next milestones will likely add authenticated flows (login, per-company data), wired action buttons (New Lead, Create Quote, Send/Approve/Convert-to-Job, dispatch assign), and invoices/reports content. Reports and Invoices pages exist as routes and load without errors but were only smoke-tested via navigation — their internals were not part of milestone 1 scope. Preview URL: https://ops-preview-7.preview.emergentagent.com. Public mvp-dashboard endpoint confirmed live and returning 200 with the expected 5/5/2/1/1/3 seed shape.",
+  "rca of the issue": "N/A — no failing scenarios. Note for future: playwright wait_for_load_state('networkidle') alone can race Next.js client-side transitions; using wait_for_url('**<expected>') is more reliable for App Router SPA nav (this initially produced false-positive 'nav-customers -> stayed on /leads' results that disappeared once wait_for_url was used)."
+}

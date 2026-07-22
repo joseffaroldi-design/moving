@@ -11,9 +11,23 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Select } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
-import { formatDate, formatTime, titleCase } from "@/lib/format";
+import { formatDate, formatTime } from "@/lib/format";
 import { jobCustomer, addr } from "@/lib/entities";
 import type { DispatchAssignment, Job } from "@/lib/types";
+
+type AnyObj = Record<string, unknown>;
+
+function embeddedJob(a: DispatchAssignment): AnyObj | undefined {
+  const j = (a as AnyObj).jobs ?? (a as AnyObj).job;
+  return j && typeof j === "object" ? (j as AnyObj) : undefined;
+}
+function embeddedTruck(a: DispatchAssignment): AnyObj | undefined {
+  const t = (a as AnyObj).trucks ?? (a as AnyObj).truck;
+  return t && typeof t === "object" ? (t as AnyObj) : undefined;
+}
+function jobNumberOf(x: AnyObj | undefined): string | undefined {
+  return x?.job_number as string | undefined;
+}
 
 export default function DispatchPage() {
   const { data, loading, error, refetch } = useDashboardData();
@@ -22,24 +36,26 @@ export default function DispatchPage() {
 
   const assignments = data?.dispatchAssignments ?? [];
   const jobs = data?.upcomingJobs ?? [];
-  const trucks = data?.trucks ?? [];
+  const fleet = data?.trucks ?? [];
 
-  // Jobs referenced by an assignment are "assigned"; the rest are unassigned.
-  const assignedJobIds = useMemo(
-    () => new Set(assignments.map((a) => a.job_id).filter(Boolean)),
+  // Assignments embed the job/truck. Match to the full job (with addresses) by number.
+  const assignedJobNumbers = useMemo(
+    () =>
+      new Set(
+        assignments
+          .map((a) => jobNumberOf(embeddedJob(a)))
+          .filter(Boolean) as string[]
+      ),
     [assignments]
   );
   const unassigned = useMemo(
-    () => jobs.filter((j) => !assignedJobIds.has(j.id)),
-    [jobs, assignedJobIds]
+    () => jobs.filter((j) => !assignedJobNumbers.has(j.job_number as string)),
+    [jobs, assignedJobNumbers]
   );
 
-  function jobFor(a: DispatchAssignment): Job | undefined {
-    return jobs.find((j) => j.id === a.job_id);
-  }
-  function truckLabel(id: unknown): string {
-    const t = trucks.find((x) => x.id === id);
-    return (t?.name || t?.label || t?.license_plate || "Unassigned truck") as string;
+  function fullJob(a: DispatchAssignment): Job | undefined {
+    const num = jobNumberOf(embeddedJob(a));
+    return jobs.find((j) => j.job_number === num);
   }
 
   return (
@@ -78,7 +94,12 @@ export default function DispatchPage() {
               ) : (
                 <div className="divide-y divide-slate-100">
                   {assignments.map((a, i) => {
-                    const job = jobFor(a);
+                    const ej = embeddedJob(a);
+                    const et = embeddedTruck(a);
+                    const job = fullJob(a);
+                    const number = (jobNumberOf(ej) as string) || "Job";
+                    const customer = job ? jobCustomer(job) : "";
+                    const truckName = (et?.name || et?.license_plate) as string | undefined;
                     return (
                       <div key={(a.id as string) ?? i} data-testid={`assignment-row-${i}`} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50">
                         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-navy text-xs font-bold text-white">
@@ -86,16 +107,21 @@ export default function DispatchPage() {
                         </div>
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-medium text-navy">
-                            {job ? `${job.job_number || "Job"} · ${jobCustomer(job)}` : "Job"}
+                            {number}{customer ? ` · ${customer}` : ""}
                           </p>
-                          <p className="truncate text-xs text-slate-500">
-                            {job ? `${addr(job, "origin")} → ${addr(job, "destination")}` : "—"}
-                          </p>
+                          {job && (
+                            <p className="truncate text-xs text-slate-500">
+                              {addr(job, "origin")} → {addr(job, "destination")}
+                            </p>
+                          )}
                           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-500">
-                            <span className="inline-flex items-center gap-1"><Truck className="h-3 w-3" />{truckLabel(a.truck_id)}</span>
+                            <span className="inline-flex items-center gap-1"><Truck className="h-3 w-3" />{truckName || "Unassigned truck"}</span>
                             {a.crew_lead ? <span className="inline-flex items-center gap-1"><User className="h-3 w-3" />{String(a.crew_lead)}</span> : null}
                             <span className="inline-flex items-center gap-1"><Clock className="h-3 w-3" />{formatTime(a.start_window as string)} – {formatTime(a.end_window as string)}</span>
                           </div>
+                          {a.dispatcher_notes ? (
+                            <p className="mt-1 truncate text-[11px] italic text-slate-400">{String(a.dispatcher_notes)}</p>
+                          ) : null}
                         </div>
                         <StatusBadge status={(a.status as string) || "assigned"} />
                       </div>
@@ -106,7 +132,7 @@ export default function DispatchPage() {
             </Card>
           </div>
 
-          {/* Sidebar: unassigned + trucks */}
+          {/* Sidebar: unassigned + fleet */}
           <div className="space-y-4">
             <Card>
               <CardHeader title={`Unassigned Jobs (${unassigned.length})`} />
@@ -138,14 +164,14 @@ export default function DispatchPage() {
             </Card>
 
             <Card>
-              <CardHeader title={`Fleet (${trucks.length})`} />
-              {trucks.length === 0 ? (
+              <CardHeader title={`Fleet (${data?.counts.trucks ?? fleet.length})`} />
+              {fleet.length === 0 ? (
                 <div className="p-4">
-                  <EmptyState icon={Truck} title="No trucks" />
+                  <EmptyState icon={Truck} title="Fleet list unavailable" description="Truck details load on the authenticated dispatch view." />
                 </div>
               ) : (
                 <div className="divide-y divide-slate-100">
-                  {trucks.map((t, i) => (
+                  {fleet.map((t, i) => (
                     <div key={(t.id as string) ?? i} className="flex items-center justify-between px-4 py-2.5">
                       <div className="flex items-center gap-2">
                         <Truck className="h-4 w-4 text-slate-400" />

@@ -1,19 +1,26 @@
-"use client";
+import { DashboardShell } from "@/components/data/DashboardShell";
+import { getDashboard } from "@/lib/api";
+import type { NormalizedDashboard } from "@/lib/types";
 
-import { AppShell } from "@/components/shell/AppShell";
-import { DashboardProvider } from "@/components/data/DashboardProvider";
-import { STAFF_NAV } from "@/lib/nav";
+export const dynamic = "force-dynamic";
 
-export default function DashboardLayout({
+export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  let initialData: NormalizedDashboard | null = null;
+  let initialError: string | null = null;
+  try {
+    initialData = await getDashboard();
+  } catch (e) {
+    initialError =
+      e instanceof Error ? e.message : "Failed to load dashboard data.";
+  }
+
   return (
-    <DashboardProvider>
-      <AppShell nav={STAFF_NAV} section="Operations">
-        {children}
-      </AppShell>
-    </DashboardProvider>
+    <DashboardShell initialData={initialData} initialError={initialError}>
+      {children}
+    </DashboardShell>
   );
 }

@@ -12,7 +12,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { Input } from "@/components/ui/input";
 import { Drawer } from "@/components/ui/drawer";
 import { formatCurrency, formatDate, formatPhone } from "@/lib/format";
-import { customerDisplayName, leadName, quoteCustomer, jobCustomer } from "@/lib/entities";
+import { customerDisplayName, leadName, quoteCustomer, jobCustomer, contactEmail, contactPhone } from "@/lib/entities";
 
 type CustomerRow = {
   id: string;
@@ -33,8 +33,8 @@ export default function CustomersPage() {
       return data.customers.map((c, i) => ({
         id: (c.id as string) ?? String(i),
         name: customerDisplayName(c as Record<string, unknown>),
-        email: c.email as string,
-        phone: c.phone as string,
+        email: contactEmail(c as Record<string, unknown>),
+        phone: contactPhone(c as Record<string, unknown>),
       }));
     }
     const seen = new Map<string, CustomerRow>();
@@ -44,8 +44,8 @@ export default function CustomersPage() {
         seen.set(name, {
           id: (l.customer_id as string) || (l.id as string) || String(i),
           name,
-          email: l.email as string,
-          phone: l.phone as string,
+          email: contactEmail(l),
+          phone: contactPhone(l),
         });
       }
     });
