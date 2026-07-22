@@ -48,12 +48,16 @@ grant  execute on function public.has_company_role(uuid, public.user_role[]) to 
 
 revoke execute on function public.current_customer_id() from public;
 revoke execute on function public.current_customer_id() from anon;
--- (No grant to authenticated: intentionally unavailable until the Portal phase.)
+revoke execute on function public.current_customer_id() from authenticated;
+-- (Intentionally NON-executable by any client until the Portal phase.)
 
 -- =====================================================================
 -- PART C — public.leads staff-only RLS (SELECT/INSERT/UPDATE)
 --   Approved staff: owner, operations_manager, dispatcher, sales.
 -- =====================================================================
+alter table public.leads enable row level security;
+
+
 drop policy if exists "leads_company_select" on public.leads;
 create policy "leads_company_select"
 on public.leads for select to authenticated
@@ -95,6 +99,9 @@ with check (
 --   SELECT: owner, operations_manager, dispatcher, sales
 --   INSERT/UPDATE: owner, operations_manager, sales
 -- =====================================================================
+alter table public.customers enable row level security;
+
+
 drop policy if exists "customers_customer_self_select" on public.customers;
 
 drop policy if exists "customers_company_select" on public.customers;
