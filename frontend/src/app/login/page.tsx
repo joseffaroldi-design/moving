@@ -99,7 +99,7 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                minLength={6}
+                minLength={mode === "signup" ? 6 : undefined}
                 placeholder="••••••••"
               />
             </div>

@@ -1,0 +1,23 @@
+{
+  "summary": "Focused re-test of the login minLength fix reported in iteration_3. All 3 acceptance criteria PASS on the live preview (desktop 1920x800). (1) Login with short 4-char password qa-owner@example.com/1234 now succeeds: password field has no minlength attribute in login mode, checkValidity()=true, Sign in click submits to Supabase, and browser is redirected to /dashboard with 'Signed in successfully.' toast (user identified in header as 'qa-owner / Demo mode'). (2) /dashboard/leads loads without error (no .error/[class*=error] elements), and ZZTEST Lead-0722 row (CONTACTED) from iteration_3 is visible in the leads table, confirming session + RLS read still work for the owner. (3) After clicking 'Create an account' (switch-to-signup), the password Input carries minlength='6' and checkValidity() returns false for a 4-char password, so signup mode still enforces the minimum. Fix at login/page.tsx line 102 (minLength={mode === 'signup' ? 6 : undefined}) is correct and effective.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "login/page.tsx line 102 fix is minimal and correct: minLength is now conditional on signup mode only, matching Supabase's own policy for existing accounts. No regressions observed.",
+    "Reminder from iteration_3 still open (not part of this re-test scope): New Lead performs two client-side writes (customers.insert then leads.insert) with no transactional rollback; consider a Postgres RPC create_lead_with_customer."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend-only re-test)", "frontend": "100% (4/4 checks pass: minlength absent in login mode, checkValidity true, dashboard redirect, ZZTEST visible on /dashboard/leads, minlength=6 present in signup mode with checkValidity false)"},
+  "test_credentials": "qa-owner@example.com / 1234 (from review request). Now works end-to-end without any HTML5 constraint workaround.",
+  "seed_data_creation": "No new data created this run. ZZTEST Lead-0722 (CONTACTED) from iteration_3 is still present in the leads table.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Iteration_3 MEDIUM ui_bug on LoginPage (unconditional minLength=6) is FIXED and verified. Playwright tests can now log in with qa-owner@example.com / 1234 directly without needing to strip the minlength attribute via page.evaluate. Signup mode continues to enforce minLength=6. ZZTEST records from iteration_3 still visible in Supabase (user can clean up via SQL).",
+  "rca of the issue": "Root cause: login/page.tsx applied minLength={6} on the shared password Input regardless of mode. The QA owner account uses a legacy 4-char password '1234', so the browser's native HTML5 constraint blocked submit in login mode. Fix (applied by main agent): minLength={mode === 'signup' ? 6 : undefined}. Verification: DOM inspection shows the minlength attribute is absent in login mode and equals '6' in signup mode; checkValidity() returns true for '1234' in login mode and false in signup mode. End-to-end login now reaches Supabase and lands on /dashboard successfully."
+}
