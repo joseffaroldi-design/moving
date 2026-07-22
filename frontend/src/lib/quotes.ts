@@ -7,7 +7,7 @@ import { getBrowserClient } from "@/lib/supabase/client";
 // the UI and clearly labeled "Backend setup required". READS already work via
 // authenticated, RLS-scoped table access (migration 0011, applied).
 // ---------------------------------------------------------------------------
-export const QUOTES_WRITE_ENABLED = false;
+export const QUOTES_WRITE_ENABLED = true;
 
 export const BACKEND_REQUIRED_MSG =
   "Backend setup required — apply migration 0014 (quote RPCs) to enable this action.";
