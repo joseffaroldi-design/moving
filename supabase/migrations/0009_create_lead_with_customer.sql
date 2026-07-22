@@ -11,9 +11,11 @@
 -- Authorization (internal, never trusts client):
 --   * requires auth.uid()
 --   * caller must have a profile and be is_active = true
---   * caller must hold owner / operations_manager / sales for THEIR company
---     (intersection of leads-insert and customers-insert RLS; dispatcher is
---      excluded because customers RLS forbids dispatcher inserts)
+--   * caller must hold owner / operations_manager / dispatcher / sales for
+--     THEIR company (same role list as the leads INSERT RLS policy). NOTE:
+--     dispatcher cannot INSERT customers directly (customers RLS excludes it),
+--     so this RPC is the sanctioned path by which a dispatcher may create a
+--     customer as part of atomically creating a lead. Deliberate design choice.
 --   * company_id is derived from the caller's profile (NOT a client argument)
 --   * created_by is set to auth.uid() (NOT a client argument)
 --   * lead status hardcoded to 'new'
@@ -63,7 +65,7 @@ begin
   end if;
   if not public.has_company_role(
        v_company,
-       array['owner','operations_manager','sales']::public.user_role[]) then
+       array['owner','operations_manager','dispatcher','sales']::public.user_role[]) then
     raise exception 'Insufficient privileges to create a customer and lead';
   end if;
   if btrim(coalesce(p_first_name,'')) = '' or btrim(coalesce(p_last_name,'')) = '' then
@@ -101,6 +103,8 @@ revoke execute on function public.create_lead_with_customer(
   text,text,text,text,text,date,text,text,integer,integer,text) from public;
 revoke execute on function public.create_lead_with_customer(
   text,text,text,text,text,date,text,text,integer,integer,text) from anon;
+revoke execute on function public.create_lead_with_customer(
+  text,text,text,text,text,date,text,text,integer,integer,text) from authenticated;
 grant  execute on function public.create_lead_with_customer(
   text,text,text,text,text,date,text,text,integer,integer,text) to authenticated;
 
