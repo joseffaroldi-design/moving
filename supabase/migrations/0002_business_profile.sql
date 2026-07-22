@@ -57,6 +57,11 @@ begin
 end;
 $$;
 
+-- Trigger-only function: not callable from the browser.
+revoke execute on function public.set_business_profile_updated_at() from public;
+revoke execute on function public.set_business_profile_updated_at() from anon;
+revoke execute on function public.set_business_profile_updated_at() from authenticated;
+
 drop trigger if exists trg_business_profile_updated_at on public.business_profile;
 create trigger trg_business_profile_updated_at
 before update on public.business_profile
@@ -66,6 +71,10 @@ for each row execute procedure public.set_business_profile_updated_at();
 -- Data API grants. RLS below still governs which rows/actions are allowed.
 -- id is uuid default gen_random_uuid() -> no sequence to grant.
 -- ---------------------------------------------------------------------
+-- Strip anon/public entirely, then grant only what authenticated needs.
+revoke all on table public.business_profile from anon;
+revoke all on table public.business_profile from public;
+
 grant select, insert, update on table public.business_profile to authenticated;
 
 -- ---------------------------------------------------------------------
