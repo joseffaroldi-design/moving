@@ -293,8 +293,27 @@ read-only verification JSON → then frontend/RPCs wired.
   linked lead (editable); client-side validation (required, end>start, nonneg) mirrors RPC;
   savingRef prevents duplicate submit; calls ONLY convert_quote_to_job; success panel shows
   returned job number + "Open Job"; treats created=false as success; refreshes quote list.
-- Verified: `tsc --noEmit` PASS; `yarn build` PASS (26 routes); unauth /dashboard/jobs -> 307
-  /login?next=. **VERIFIED (2026-06): owner completed the full quote→job conversion test —
-  To Job on accepted quote → Schedule Job (lead prefill) → Convert → J-#### job created,
-  quote flips to Converted, View Job works, idempotent retry returns same job, hidden on
-  draft/sent quotes. Phase 5 conversion COMPLETE.**
+### Phase 6 — Dispatch + Job Status (2026-06, IN PROGRESS)
+- **preflight_0017_dispatch_schema.sql — RUN & analyzed.** jobs/job_crew/job_trucks/
+  job_status_events already locked (0016a). trucks + dispatch_assignments were wide-open P0
+  (anon+auth full DML+TRUNCATE, RLS not forced). Two assignment models confirmed:
+  dispatch_assignments (day-board: dispatch_day_id, truck_id, crew_lead_id, dispatch_status,
+  windows, route/sort order; unique(dispatch_day_id,job_id)) vs job_crew (roster) / job_trucks
+  (all trucks). job_status enum = scheduled,confirmed,in_progress,completed,cancelled.
+  job_status_events.status is dispatch_status (operational log, NOT the lifecycle). No client
+  status-transition or assignment RPCs exist. `can_dispatch_company` NOT executable by
+  authenticated (old dispatch/trucks write policies were broken). dispatch_assignments.dispatch_day_id
+  FK -> dispatch_days (schema unknown; needs its own preflight).
+- **0017a_trucks_dispatch_grant_lockdown.sql — APPLIED & VERIFIED (full PASS).** trucks +
+  dispatch_assignments: anon/PUBLIC stripped; authenticated SELECT only; RLS enabled+FORCED;
+  broken can_dispatch_company write policies dropped; one staff SELECT policy each (own
+  company_id, roles owner/operations_manager/dispatcher/sales). Rows preserved (trucks=3,
+  dispatch_assignments=1).
+- **Agreed model & rules (for 0017b/0017c):** dispatch_assignments = source of truth for the
+  dispatch day/route/window/status/crew_lead/primary truck; job_crew = full roster; job_trucks =
+  all trucks. RPCs must update related records atomically (no drift). Job-status setter roles:
+  owner/operations_manager/dispatcher (NOT sales). Lifecycle: scheduled→confirmed→in_progress→
+  completed; any non-terminal→cancelled; completed/cancelled terminal; block backward/skips;
+  same-status = idempotent success. Do NOT use job_status_events for the 5-value lifecycle.
+- **NEXT:** dispatch_days read-only preflight (delivered) -> then 0017b (job status RPC) ->
+  0017c (assignment RPCs) -> frontend.
