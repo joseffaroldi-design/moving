@@ -103,3 +103,52 @@ export async function convertQuoteToJob(
   if (error) throw new Error(error.message);
   return data as ConvertQuoteToJobResult;
 }
+
+// ---------------------------------------------------------------------------
+// Job lifecycle transitions (migration 0017c). Roles allowed to mutate:
+// owner, operations_manager, dispatcher. UI shows only the legal next step.
+// ---------------------------------------------------------------------------
+export const JOB_STATUS_SETTER_ROLES = ["owner", "operations_manager", "dispatcher"];
+
+export function canSetJobStatus(role: string | null | undefined): boolean {
+  return !!role && JOB_STATUS_SETTER_ROLES.includes(role);
+}
+
+export function isTerminalJobStatus(status: string | null | undefined): boolean {
+  return status === "completed" || status === "cancelled";
+}
+
+export interface JobTransition {
+  to: string;
+  label: string;
+}
+
+// The single legal forward transition for a given status (null if terminal).
+export function forwardJobTransition(status: string | null | undefined): JobTransition | null {
+  switch (status) {
+    case "scheduled":
+      return { to: "confirmed", label: "Confirm" };
+    case "confirmed":
+      return { to: "in_progress", label: "Start" };
+    case "in_progress":
+      return { to: "completed", label: "Complete" };
+    default:
+      return null;
+  }
+}
+
+export interface SetJobStatusResult {
+  job_id: string;
+  status: string;
+  changed: boolean;
+}
+
+export async function setJobStatus(jobId: string, status: string): Promise<SetJobStatusResult> {
+  const supabase = getBrowserClient();
+  const { data, error } = await supabase.rpc("set_job_status", {
+    p_job_id: jobId,
+    p_status: status,
+  });
+  if (error) throw new Error(error.message);
+  return data as SetJobStatusResult;
+}

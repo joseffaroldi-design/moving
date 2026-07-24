@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Search, MapPin, Users, Truck, FileText } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { PageHeader } from "@/components/ui/page-header";
@@ -11,10 +11,22 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Input, Select } from "@/components/ui/input";
 import { Drawer } from "@/components/ui/drawer";
+import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useToast } from "@/components/ui/toast";
 import { formatDate, formatDateTime } from "@/lib/format";
-import { fetchJobs, jobStatusLabel, JOB_STATUSES, type JobRecord } from "@/lib/jobs";
+import {
+  fetchJobs,
+  jobStatusLabel,
+  JOB_STATUSES,
+  setJobStatus,
+  forwardJobTransition,
+  isTerminalJobStatus,
+  canSetJobStatus,
+  type JobRecord,
+} from "@/lib/jobs";
 
-const TIMELINE = ["scheduled", "in_progress", "completed"];
+const TIMELINE = ["scheduled", "confirmed", "in_progress", "completed"];
 
 function jobCustomerName(j: JobRecord): string {
   const c = j.customers;
@@ -23,8 +35,10 @@ function jobCustomerName(j: JobRecord): string {
 }
 
 export default function JobsPage() {
-  const { me } = useAuth();
+  const { me, role } = useAuth();
   const companyId = (me?.profile as { company_id?: string } | null)?.company_id ?? null;
+  const canManageStatus = canSetJobStatus(role);
+  const toast = useToast();
 
   const [jobs, setJobs] = useState<JobRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -32,6 +46,9 @@ export default function JobsPage() {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [statusBusy, setStatusBusy] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const busyRef = useRef(false);
 
   const load = useCallback(async () => {
     if (!companyId) {
@@ -73,6 +90,31 @@ export default function JobsPage() {
   const activeStep = selected
     ? Math.max(0, TIMELINE.indexOf(String(selected.status ?? "").toLowerCase()))
     : 0;
+
+  const forward = selected ? forwardJobTransition(selected.status) : null;
+  const canCancelJob = selected ? !isTerminalJobStatus(selected.status) : false;
+
+  const changeStatus = useCallback(
+    async (to: string) => {
+      if (!selectedId || busyRef.current) return;
+      busyRef.current = true;
+      setStatusBusy(true);
+      try {
+        const res = await setJobStatus(selectedId, to);
+        toast(
+          res.changed ? `Job status set to ${jobStatusLabel(res.status)}.` : "Status already up to date.",
+          "success"
+        );
+        await load();
+      } catch (e) {
+        toast(e instanceof Error ? e.message : "Could not update job status.", "error");
+      } finally {
+        busyRef.current = false;
+        setStatusBusy(false);
+      }
+    },
+    [selectedId, load, toast]
+  );
 
   return (
     <div>
@@ -173,6 +215,33 @@ export default function JobsPage() {
         onClose={() => setSelectedId(null)}
         data-testid="job-detail-drawer"
         title={selected ? `${selected.job_number || "Job"} · ${jobCustomerName(selected)}` : ""}
+        footer={
+          selected && canManageStatus && !isTerminalJobStatus(selected.status) ? (
+            <div className="flex flex-wrap gap-2" data-testid="job-status-actions">
+              {forward && (
+                <Button
+                  variant="gold"
+                  className="flex-1"
+                  loading={statusBusy}
+                  onClick={() => changeStatus(forward.to)}
+                  data-testid="job-status-forward"
+                >
+                  {forward.label}
+                </Button>
+              )}
+              {canCancelJob && (
+                <Button
+                  variant="danger"
+                  disabled={statusBusy}
+                  onClick={() => setConfirmCancel(true)}
+                  data-testid="job-status-cancel"
+                >
+                  Cancel Job
+                </Button>
+              )}
+            </div>
+          ) : undefined
+        }
       >
         {selected && (
           <div className="space-y-5">
@@ -186,7 +255,7 @@ export default function JobsPage() {
             </div>
 
             {/* Timeline */}
-            {["scheduled", "in_progress", "completed"].includes(selected.status) && (
+            {selected.status !== "cancelled" && (
               <div>
                 <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Status Timeline</h4>
                 <div className="flex items-center">
@@ -247,6 +316,18 @@ export default function JobsPage() {
           </div>
         )}
       </Drawer>
+
+      <ConfirmDialog
+        open={confirmCancel}
+        onClose={() => setConfirmCancel(false)}
+        onConfirm={() => {
+          setConfirmCancel(false);
+          changeStatus("cancelled");
+        }}
+        title="Cancel this job?"
+        description="The job will be marked Cancelled. This is a terminal state and cannot be undone from here."
+        confirmLabel="Cancel Job"
+      />
     </div>
   );
 }

@@ -334,3 +334,23 @@ read-only verification JSON → then frontend/RPCs wired.
   uses to_jsonb(profiles)->>key (column-safe) because profiles has no full_name column — a
   direct column ref aborted CREATE (check_function_bodies) on the first attempt; fixed.
   **Phase 6 BACKEND COMPLETE & VERIFIED. Frontend pending.**
+
+### Phase 6 FRONTEND (2026-06, BUILT; tsc + prod build + anon negative tests PASS; owner manual test pending)
+- `src/lib/jobs.ts`: added `setJobStatus`, `forwardJobTransition` (scheduled→confirmed→in_progress→
+  completed), `isTerminalJobStatus`, `canSetJobStatus` (owner/ops/dispatcher).
+- `src/lib/dispatch.ts` (NEW): RLS-scoped reads (trucks, company members via profiles, assignments
+  for a date w/ dispatch_days!inner + trucks + jobs joins, job_crew, job_trucks) + RPC wrappers
+  `assignJobToDispatch`/`setJobCrew`/`setJobTrucks`; `canDispatch` role helper. No direct writes.
+- `src/app/dashboard/jobs/page.tsx`: detail-drawer status controls (Confirm/Start/Complete forward +
+  Cancel w/ ConfirmDialog), 4-stage timeline incl. Confirmed, gated to owner/ops/dispatcher, calls
+  only set_job_status, refreshes after success.
+- `src/app/dashboard/dispatch/page.tsx` (REWRITTEN): authenticated day-board (date picker, assigned
+  runs, unassigned jobs, fleet) + per-job Assign/Edit `AssignmentDrawer` (date, time window, primary
+  truck, crew lead, route order, notes; full crew roster + truck-list multi-selects; lead/primary
+  visually distinguished and force-included). Submits assign→set_job_crew→set_job_trucks; shows
+  hard-block conflict errors in-drawer; preserves form on error; refreshes on success. Read-only
+  banner + hidden mutation controls for sales/non-dispatch roles.
+- Verified: tsc PASS; yarn build PASS (26 routes); unauth /dashboard/jobs & /dispatch → 307 /login;
+  anon SELECT on jobs/dispatch_assignments/dispatch_days/trucks/job_crew/job_trucks → 42501; anon
+  INSERT trucks → 401; all client + internal RPCs unreachable anon (404/401, never executed).
+  **OWNER POSITIVE-FLOW TEST PENDING.**
