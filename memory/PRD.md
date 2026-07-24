@@ -219,3 +219,12 @@ Stored subtotal=gross_subtotal. Labor is scalar-only (UI must not add labor line
 - Owner: confirm Steps 3-6 + the approval-link round trip (create link → open /q/<token> →
   approve/decline → status flips to accepted/rejected).
 - 0016 quote→job conversion handoff (Phase 5 Jobs).
+
+## Phase 4 — COMPLETE & VERIFIED (2026-07)
+- Login hang FIXED (root cause: navigator Web Lock deadlock in signInWithPassword after a
+  dev crash). Fix: pass-through `lock` in createBrowserClient (client.ts) + callFunction 15s
+  abort + signIn no longer blocks on /me (6s race). middleware carries refreshed cookies on redirect.
+- Owner confirmed ALL six quote flows (create/edit/duplicate/send/expire/cancel) + the
+  approval-link round-trip (create link → public /q/<token> → approve → status flips → link single-use).
+- ZZZTEST cleanup SQL provided.
+- NEXT: 0016 quote→job conversion handoff (begins Phase 5: Jobs).
