@@ -294,4 +294,7 @@ read-only verification JSON → then frontend/RPCs wired.
   savingRef prevents duplicate submit; calls ONLY convert_quote_to_job; success panel shows
   returned job number + "Open Job"; treats created=false as success; refreshes quote list.
 - Verified: `tsc --noEmit` PASS; `yarn build` PASS (26 routes); unauth /dashboard/jobs -> 307
-  /login?next=. Positive conversion flow awaits owner manual test (no-credential rule).
+  /login?next=. **VERIFIED (2026-06): owner completed the full quote→job conversion test —
+  To Job on accepted quote → Schedule Job (lead prefill) → Convert → J-#### job created,
+  quote flips to Converted, View Job works, idempotent retry returns same job, hidden on
+  draft/sent quotes. Phase 5 conversion COMPLETE.**
