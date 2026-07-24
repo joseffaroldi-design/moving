@@ -156,7 +156,14 @@ begin
          or (p_start_window < a.end_window and a.start_window < p_end_window) )
     limit 1;
     if v_conf_num is not null then
-      select full_name into v_name from public.profiles where id = p_crew_lead_id;
+      select coalesce(
+               to_jsonb(p) ->> 'full_name',
+               to_jsonb(p) ->> 'name',
+               nullif(btrim(coalesce(to_jsonb(p) ->> 'first_name','') || ' ' ||
+                            coalesce(to_jsonb(p) ->> 'last_name','')), ''),
+               p.id::text
+             ) into v_name
+      from public.profiles p where p.id = p_crew_lead_id;
       raise exception 'Crew lead "%" is already booked on % for job % (time conflict).',
         coalesce(v_name,'?'), p_dispatch_date, v_conf_num;
     end if;
