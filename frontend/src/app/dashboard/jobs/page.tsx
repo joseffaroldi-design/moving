@@ -216,30 +216,36 @@ export default function JobsPage() {
         data-testid="job-detail-drawer"
         title={selected ? `${selected.job_number || "Job"} · ${jobCustomerName(selected)}` : ""}
         footer={
-          selected && canManageStatus && !isTerminalJobStatus(selected.status) ? (
-            <div className="flex flex-wrap gap-2" data-testid="job-status-actions">
-              {forward && (
-                <Button
-                  variant="gold"
-                  className="flex-1"
-                  loading={statusBusy}
-                  onClick={() => changeStatus(forward.to)}
-                  data-testid="job-status-forward"
-                >
-                  {forward.label}
-                </Button>
-              )}
-              {canCancelJob && (
-                <Button
-                  variant="danger"
-                  disabled={statusBusy}
-                  onClick={() => setConfirmCancel(true)}
-                  data-testid="job-status-cancel"
-                >
-                  Cancel Job
-                </Button>
-              )}
-            </div>
+          selected && !isTerminalJobStatus(selected.status) ? (
+            canManageStatus ? (
+              <div className="flex flex-wrap gap-2" data-testid="job-status-actions">
+                {forward && (
+                  <Button
+                    variant="gold"
+                    className="flex-1"
+                    loading={statusBusy}
+                    onClick={() => changeStatus(forward.to)}
+                    data-testid="job-status-forward"
+                  >
+                    {forward.label}
+                  </Button>
+                )}
+                {canCancelJob && (
+                  <Button
+                    variant="danger"
+                    disabled={statusBusy}
+                    onClick={() => setConfirmCancel(true)}
+                    data-testid="job-status-cancel"
+                  >
+                    Cancel Job
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <p className="text-xs text-slate-500" data-testid="job-status-readonly">
+                You have read-only access. Status changes require an owner, operations manager, or dispatcher.
+              </p>
+            )
           ) : undefined
         }
       >

@@ -165,7 +165,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user,
         session,
         me,
-        role: (me?.role as string) ?? null,
+        role:
+          ((me?.role as string) ??
+            ((me?.profile as Record<string, unknown> | null)?.role as string)) ??
+          null,
         error,
         signIn,
         signUp,

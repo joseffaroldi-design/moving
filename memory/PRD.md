@@ -354,3 +354,8 @@ read-only verification JSON → then frontend/RPCs wired.
   anon SELECT on jobs/dispatch_assignments/dispatch_days/trucks/job_crew/job_trucks → 42501; anon
   INSERT trucks → 401; all client + internal RPCs unreachable anon (404/401, never executed).
   **OWNER POSITIVE-FLOW TEST PENDING.**
+- **BUGFIX (2026-06):** owner saw no status controls. Root cause: `useAuth().role` read only
+  top-level `me.role`, but the deployed `me` function returns role at `me.profile.role` (Quotes
+  never gated on role, so it went unnoticed). Fixed AuthProvider `role` to fall back to
+  `me.profile.role`; added a read-only note in the Jobs drawer for genuinely unauthorized roles.
+  tsc + build PASS. Re-test pending.
