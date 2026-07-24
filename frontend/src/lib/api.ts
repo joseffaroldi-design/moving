@@ -24,6 +24,8 @@ async function callFunction<T>(
   opts: { method?: string; body?: unknown; token?: string } = {}
 ): Promise<T> {
   const { method = "GET", body, token } = opts;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
   let res: Response;
   try {
     res = await fetch(`${FUNCTIONS_URL}/${name}`, {
@@ -31,12 +33,15 @@ async function callFunction<T>(
       headers: baseHeaders(token),
       body: body ? JSON.stringify(body) : undefined,
       cache: "no-store",
+      signal: controller.signal,
     });
   } catch {
     throw new ApiError(
       "Unable to reach the MoveOps backend. The Supabase project may be paused or offline.",
       0
     );
+  } finally {
+    clearTimeout(timer);
   }
 
   const text = await res.text();

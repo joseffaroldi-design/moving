@@ -95,7 +95,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const token = data.session?.access_token;
       let role: string | null = null;
       if (token) {
-        const meRes = await bootstrap(token);
+        // Never let a slow/hanging /me block sign-in navigation.
+        const meRes = await Promise.race([
+          bootstrap(token),
+          new Promise<MeResponse | null>((resolve) =>
+            setTimeout(() => resolve(null), 6000)
+          ),
+        ]);
         role = (meRes?.role as string) ?? null;
       }
       return { role };
