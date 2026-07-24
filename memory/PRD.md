@@ -417,3 +417,14 @@ read-only verification JSON → then frontend/RPCs wired.
   non-negative numbers), preserves entered values on failure, success/error toasts, refreshes list +
   drawer. Status change + append-only lead_notes remain separate actions. No RLS/grants/migrations
   changed. tsc PASS; yarn build PASS. Owner verified editing the incomplete `j h` test lead — "works".
+
+- **DEPLOY FIX — frontend cloud build failure (2026-07-24):** First production deploy failed at
+  build step 8 "frontend-build-push" (exit 1). Root cause: the security checkpoint had added `sharp`
+  as a DIRECT dependency; sharp@0.35.3 declares engines.node>=20.9.0, and yarn (v1, engine-strict in
+  this toolchain) HARD-FAILS `yarn install` on an engine mismatch for a direct dep — whereas as
+  Next's OPTIONAL dep the same mismatch is non-fatal/skipped. Cloud build runs on x86_64 (vs ARM64
+  preview) with its own Node, so the direct sharp promoted a normally-skippable install into a fatal
+  abort. FIX: `yarn remove sharp` (reverts sharp to Next's optional dep) while KEEPING the yarn
+  resolution {sharp: 0.35.3} so it stays patched + non-fatal. postcss 8.5.22 resolution kept.
+  Result: audit still 0 vulnerabilities; tsc PASS; yarn build PASS (16/16 static pages). Preview
+  healthy (home 200, /dashboard→307). Ready for redeploy.
