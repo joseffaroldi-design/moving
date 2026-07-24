@@ -359,3 +359,6 @@ read-only verification JSON → then frontend/RPCs wired.
   never gated on role, so it went unnoticed). Fixed AuthProvider `role` to fall back to
   `me.profile.role`; added a read-only note in the Jobs drawer for genuinely unauthorized roles.
   tsc + build PASS. Re-test pending.
+- **BUGFIX CONFIRMED (2026-06):** owner re-ran Test 1 — Confirm + Cancel Job controls now
+  render on scheduled J-0001. Role resolution fix verified. Remaining owner checklist (status
+  progression, dispatch assign/edit, conflict hard-block) still in progress.
