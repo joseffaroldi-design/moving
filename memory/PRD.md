@@ -390,3 +390,19 @@ read-only verification JSON → then frontend/RPCs wired.
   - PLACEHOLDER/PENDING: estimate form backend intentionally not wired (P1 upcoming). Reviews
     section intentionally omitted (structure left for easy add). No changes to Supabase/auth/RLS/
     migrations/internal workflows.
+
+- **DEPENDENCY SECURITY CHECKPOINT (2026-07-24):** Pre-deploy audit + patched upgrades (all within
+  existing majors — no major-version jump; Node 20 constraint respected).
+  Changed: next 15.1.6→15.5.21, eslint-config-next 15.1.6→15.5.21, @supabase/supabase-js 2.48.1→
+  2.109.0 (2.110+ needs Node 22), @supabase/ssr 0.5.2→0.7.0 (realigned cookie types), postcss(direct)
+  8.5.1→8.5.22; ADDED sharp 0.35.3 (direct) + yarn resolutions {postcss 8.5.22, sharp 0.35.3} to
+  override Next's bundled transitive deps.
+  Fixes: 2 Critical (React-flight RCE; CVE-2025-29927 middleware auth-bypass — directly relevant as
+  /dashboard,/portal,/mobile are middleware-gated), plus SSRF/DoS/postcss/sharp/auth-js.
+  Audit: 35 vulns (2C/13H/16M/4L) → **0 vulnerabilities**. tsc PASS; yarn build PASS (26 routes intact).
+  Smoke verified: Supabase auth reachable (bad creds→400); middleware redirect /dashboard,/portal,
+  /mobile→307 /login; /login 200; /q/[token] 200; homepage desktop+mobile OK; LOGIN + LEADS confirmed
+  working by owner (real seed data + lead drawer render). PENDING owner spot-check: Quotes, Jobs,
+  Dispatch, /q/<token> approval page. NOT YET DEPLOYED — awaiting user approval.
+  NOTE: supervisor runs `yarn start` = `next dev` (hot reload); prod serving would use `start:prod`
+  (`next start`). After a `yarn build`, restart frontend to clear a transient dev 404.
