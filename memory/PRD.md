@@ -362,3 +362,8 @@ read-only verification JSON → then frontend/RPCs wired.
 - **BUGFIX CONFIRMED (2026-06):** owner re-ran Test 1 — Confirm + Cancel Job controls now
   render on scheduled J-0001. Role resolution fix verified. Remaining owner checklist (status
   progression, dispatch assign/edit, conflict hard-block) still in progress.
+- **PHASE 6 COMPLETE & VERIFIED (2026-06):** owner confirmed "all passed" — full job-status
+  progression (scheduled→confirmed→in_progress→completed), cancel-to-terminal, dispatch
+  assign/edit (window/primary truck/crew lead/roster/trucks), and hard-block truck/crew
+  double-booking conflict. Backend (0017a–d) + frontend (jobs status controls + dispatch board
+  & AssignmentDrawer) all live and verified. NEXT: Phase 7 Crew Mobile (pending user go-ahead).
