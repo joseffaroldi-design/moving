@@ -367,3 +367,26 @@ read-only verification JSON → then frontend/RPCs wired.
   assign/edit (window/primary truck/crew lead/roster/trucks), and hard-block truck/crew
   double-booking conflict. Backend (0017a–d) + frontend (jobs status controls + dispatch board
   & AssignmentDrawer) all live and verified. NEXT: Phase 7 Crew Mobile (pending user go-ahead).
+
+- **PUBLIC MARKETING HOMEPAGE COMPLETE (2026-06-24):** Replaced the internal-ops landing at
+  `/app/frontend/src/app/page.tsx` with a public marketing homepage for Southern Magnolia Movers.
+  Sections: sticky header (nav + click-to-call + Free estimate CTA), navy hero (provided Unsplash
+  mover photo), frontend-only Estimate form, Services (6, 3 with real stock photos: crew/truck,
+  packing, clean-out), Why-us/trust (3), Service area, Contact CTA, footer with discreet Staff
+  login link → /login. New file: `src/components/marketing/EstimateForm.tsx`.
+  - Estimate form is FRONTEND-ONLY by design: no DB/API write, no store/transmit/log. On submit it
+    renders a local estimate-request summary + "Online submission is coming soon. Call or text..."
+    + prominent click-to-call. Structured with an EstimateValues type + comment marking where to
+    POST to a future secure public lead-intake endpoint.
+  - NO fabricated content: no reviews/testimonials/star-ratings, no invented hours or parish
+    claims. Uses "Call or text for availability" and "New Orleans and surrounding communities"
+    (both editable consts). Confirmed phone (504) 559-6340 + email smagnoliamoving@gmail.com.
+  - Brand system (navy/gold/cream, Playfair/Chivo/IBM Plex) + existing Logo components. Mobile-first,
+    next/image optimized, data-testids on interactive elements.
+  - Verified: tsc PASS; yarn build PASS (all 26 routes incl. /login /dashboard /portal /q/[token]
+    /mobile preserved, / static 3.06kB). Visual test desktop (1920) + mobile (390) PASS; estimate
+    flow (fill → summary → coming-soon + call CTA) PASS. NOTE: frontend runs `yarn start` (prod
+    build, NO hot reload) — must `supervisorctl restart frontend` after each build to serve changes.
+  - PLACEHOLDER/PENDING: estimate form backend intentionally not wired (P1 upcoming). Reviews
+    section intentionally omitted (structure left for easy add). No changes to Supabase/auth/RLS/
+    migrations/internal workflows.
