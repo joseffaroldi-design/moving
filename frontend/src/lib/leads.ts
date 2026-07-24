@@ -89,6 +89,19 @@ export async function createLeadWithCustomer(
   return data as { customer_id: string; lead_id: string };
 }
 
+// Single lead read (used for prefilling the Schedule Job form from a quote's
+// linked lead). RLS-scoped; returns null if not visible/found.
+export async function fetchLeadById(id: string): Promise<LeadRecord | null> {
+  const supabase = getBrowserClient();
+  const { data, error } = await supabase
+    .from("leads")
+    .select(LEAD_SELECT)
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return (data ?? null) as unknown as LeadRecord | null;
+}
+
 export async function updateLeadStatus(id: string, status: LeadStatus): Promise<void> {
   const supabase = getBrowserClient();
   const { error } = await supabase.from("leads").update({ status }).eq("id", id);

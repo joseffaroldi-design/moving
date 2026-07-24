@@ -275,3 +275,23 @@ read-only verification JSON → then frontend/RPCs wired.
   payroll_entries lockdown.
 - Job write RPCs (SECURITY DEFINER, mirroring quotes 0014): create/update job, status
   transitions, dispatch (crew/truck assignment), crew-mobile append-only events.
+
+### Frontend (Phase 5 conversion — BUILT, tsc + prod build PASS; owner manual test pending)
+- `src/lib/jobs.ts` (NEW): authenticated RLS-scoped `fetchJobs(companyId)` (jobs + customer
+  join, ordered by scheduled_start desc), `convertQuoteToJob(...)` wrapper mirroring 0016b
+  args exactly (idempotent: created=false when quote already converted), `jobStatusLabel`,
+  `JOB_STATUSES`. No direct client writes to locked job tables.
+- `src/lib/leads.ts`: added `fetchLeadById(id)` (RLS-scoped) for Schedule Job prefill.
+- `src/app/dashboard/jobs/page.tsx` (REWRITTEN): replaced mvp-dashboard payload with
+  authenticated DB reads (fetchJobs). Removed the mock "New Job" button. Table + mobile cards
+  show job #, customer, scheduled date/time, route (origin→destination), crew/trucks, status.
+  Detail drawer: status timeline, schedule, route, dispatch notes, created/updated.
+- `src/app/dashboard/quotes/page.tsx`: "To Job" button now shows only for canonical
+  `accepted` quotes and is enabled (gated by canWrite); a "View Job" button shows for
+  `converted` quotes (routes to /dashboard/jobs). New `ScheduleJobDrawer`: scheduled_start +
+  origin + destination required; optional end/crew/trucks/notes; prefills date+addresses from
+  linked lead (editable); client-side validation (required, end>start, nonneg) mirrors RPC;
+  savingRef prevents duplicate submit; calls ONLY convert_quote_to_job; success panel shows
+  returned job number + "Open Job"; treats created=false as success; refreshes quote list.
+- Verified: `tsc --noEmit` PASS; `yarn build` PASS (26 routes); unauth /dashboard/jobs -> 307
+  /login?next=. Positive conversion flow awaits owner manual test (no-credential rule).

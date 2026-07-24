@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Search,
   Plus,
@@ -16,6 +17,8 @@ import {
   AlertTriangle,
   Link2,
   Check,
+  MapPin,
+  CheckCircle2,
 } from "lucide-react";
 import { useDashboardData } from "@/components/data/DashboardProvider";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -34,8 +37,9 @@ import { formatCurrency, formatDate } from "@/lib/format";
 import { Logo } from "@/components/brand/Logo";
 import { BRAND } from "@/lib/brand";
 import { fetchCustomers, type CustomerRecord } from "@/lib/customers";
-import { fetchLeads, type LeadRecord } from "@/lib/leads";
+import { fetchLeads, fetchLeadById, type LeadRecord } from "@/lib/leads";
 import { leadName } from "@/lib/entities";
+import { convertQuoteToJob } from "@/lib/jobs";
 import {
   QUOTES_WRITE_ENABLED,
   BACKEND_REQUIRED_MSG,
@@ -768,10 +772,12 @@ function QuoteDetailDrawer({
   onChanged: () => void;
 }) {
   const toast = useToast();
+  const router = useRouter();
   const [items, setItems] = useState<QuoteLineItem[]>([]);
   const [itemsLoading, setItemsLoading] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [showSchedule, setShowSchedule] = useState(false);
   const [link, setLink] = useState<{ url: string; expires: string } | null>(null);
   const [linkBusy, setLinkBusy] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -795,6 +801,7 @@ function QuoteDetailDrawer({
   const canSend = ["draft", "sent", "viewed"].includes(quote.status);
   const canExpire = ["draft", "sent", "viewed"].includes(quote.status);
   const canCancel = quote.status !== "converted" && quote.status !== "cancelled";
+  const canConvert = canWrite && quote.status === "accepted";
 
   async function run(action: string, fn: () => Promise<unknown>) {
     if (!canWrite) {
@@ -928,14 +935,26 @@ function QuoteDetailDrawer({
                 <Ban className="h-4 w-4" /> Cancel
               </Button>
             )}
-            <Button
-              variant="navy"
-              disabled
-              title="Quote-to-Job conversion arrives in Phase 5 (backend setup required)."
-              data-testid="quote-convert-button"
-            >
-              <Briefcase className="h-4 w-4" /> To Job
-            </Button>
+            {quote.status === "accepted" && (
+              <Button
+                variant="navy"
+                disabled={!canConvert}
+                title={canConvert ? undefined : disabledTitle}
+                onClick={() => setShowSchedule(true)}
+                data-testid="quote-convert-button"
+              >
+                <Briefcase className="h-4 w-4" /> To Job
+              </Button>
+            )}
+            {quote.status === "converted" && (
+              <Button
+                variant="outline"
+                onClick={() => router.push("/dashboard/jobs")}
+                data-testid="quote-open-job-button"
+              >
+                <Briefcase className="h-4 w-4" /> View Job
+              </Button>
+            )}
           </div>
         }
       >
@@ -1092,6 +1111,15 @@ function QuoteDetailDrawer({
         description="The quote will be marked Cancelled. This does not delete it."
         confirmLabel="Cancel Quote"
       />
+
+      <ScheduleJobDrawer
+        open={showSchedule}
+        quote={quote}
+        onClose={() => setShowSchedule(false)}
+        onConverted={() => {
+          onChanged();
+        }}
+      />
     </>
   );
 }
@@ -1111,5 +1139,281 @@ function Meta({ label, value }: { label: string; value: string }) {
       <p className="text-slate-500">{label}</p>
       <p className="font-medium text-navy">{value}</p>
     </div>
+  );
+}
+
+// --------------------------------------------------------------------------
+// Schedule Job (quote -> job conversion)
+// Calls ONLY the verified convert_quote_to_job RPC. Prefills date/addresses
+// from the linked lead when available (editable). Idempotent success path.
+// --------------------------------------------------------------------------
+
+const EMPTY_SCHEDULE = {
+  scheduled_start: "",
+  scheduled_end: "",
+  origin_address: "",
+  destination_address: "",
+  crew_size: "",
+  truck_count: "",
+  dispatch_notes: "",
+};
+
+function ScheduleJobDrawer({
+  open,
+  quote,
+  onClose,
+  onConverted,
+}: {
+  open: boolean;
+  quote: QuoteRecord;
+  onClose: () => void;
+  onConverted: () => void;
+}) {
+  const toast = useToast();
+  const router = useRouter();
+  const [form, setForm] = useState({ ...EMPTY_SCHEDULE });
+  const [prefilling, setPrefilling] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  const [result, setResult] = useState<{ job_id: string; job_number: string; created: boolean } | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setForm({ ...EMPTY_SCHEDULE });
+    setResult(null);
+    savingRef.current = false;
+    setSaving(false);
+    // Best-effort prefill from the linked lead.
+    if (quote.lead_id) {
+      setPrefilling(true);
+      fetchLeadById(quote.lead_id)
+        .then((lead) => {
+          if (!lead) return;
+          setForm((f) => ({
+            ...f,
+            scheduled_start: lead.move_date ? `${lead.move_date.slice(0, 10)}T09:00` : f.scheduled_start,
+            origin_address: lead.origin_address ?? f.origin_address,
+            destination_address: lead.destination_address ?? f.destination_address,
+          }));
+        })
+        .catch(() => {})
+        .finally(() => setPrefilling(false));
+    }
+  }, [open, quote.lead_id]);
+
+  function upd<K extends keyof typeof EMPTY_SCHEDULE>(k: K, v: string) {
+    setForm((f) => ({ ...f, [k]: v }));
+  }
+
+  function toIso(local: string): string | null {
+    if (!local) return null;
+    const d = new Date(local);
+    return Number.isNaN(d.getTime()) ? null : d.toISOString();
+  }
+
+  function validate(): string | null {
+    if (!form.scheduled_start) return "Scheduled start is required.";
+    const startIso = toIso(form.scheduled_start);
+    if (!startIso) return "Scheduled start is not a valid date/time.";
+    if (!form.origin_address.trim()) return "Origin address is required.";
+    if (!form.destination_address.trim()) return "Destination address is required.";
+    if (form.scheduled_end) {
+      const endIso = toIso(form.scheduled_end);
+      if (!endIso) return "Scheduled end is not a valid date/time.";
+      if (new Date(endIso) <= new Date(startIso)) return "Scheduled end must be after scheduled start.";
+    }
+    if (form.crew_size && Number(form.crew_size) < 0) return "Crew size cannot be negative.";
+    if (form.truck_count && Number(form.truck_count) < 0) return "Truck count cannot be negative.";
+    return null;
+  }
+
+  async function submit() {
+    if (savingRef.current) return;
+    const err = validate();
+    if (err) {
+      toast(err, "error");
+      return;
+    }
+    savingRef.current = true;
+    setSaving(true);
+    try {
+      const res = await convertQuoteToJob({
+        quote_id: quote.id,
+        scheduled_start: toIso(form.scheduled_start)!,
+        origin_address: form.origin_address.trim(),
+        destination_address: form.destination_address.trim(),
+        scheduled_end: form.scheduled_end ? toIso(form.scheduled_end) : null,
+        crew_size: form.crew_size ? Number(form.crew_size) : null,
+        truck_count: form.truck_count ? Number(form.truck_count) : null,
+        dispatch_notes: form.dispatch_notes.trim() || null,
+      });
+      // created=false means the quote was already converted — still a success.
+      setResult(res);
+      toast(
+        res.created ? `Job ${res.job_number} created.` : `Quote already converted — opened ${res.job_number}.`,
+        "success"
+      );
+      onConverted();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Could not convert quote to job.", "error");
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Drawer
+      open={open}
+      onClose={onClose}
+      data-testid="schedule-job-drawer"
+      title={`Schedule Job · ${quote.quote_number || "Quote"}`}
+      footer={
+        result ? (
+          <div className="flex gap-2">
+            <Button
+              variant="gold"
+              className="flex-1"
+              onClick={() => router.push("/dashboard/jobs")}
+              data-testid="open-job-button"
+            >
+              <Briefcase className="h-4 w-4" /> Open Job
+            </Button>
+            <Button variant="outline" onClick={onClose} data-testid="close-schedule-job">
+              Close
+            </Button>
+          </div>
+        ) : (
+          <div className="flex gap-2">
+            <Button
+              variant="gold"
+              className="flex-1"
+              loading={saving}
+              onClick={submit}
+              data-testid="submit-schedule-job"
+            >
+              <Briefcase className="h-4 w-4" /> Convert to Job
+            </Button>
+            <Button variant="outline" onClick={onClose} data-testid="cancel-schedule-job">
+              Cancel
+            </Button>
+          </div>
+        )
+      }
+    >
+      {result ? (
+        <div className="space-y-4" data-testid="schedule-job-success">
+          <div className="flex flex-col items-center gap-2 rounded-md border border-green-200 bg-green-50 p-5 text-center">
+            <CheckCircle2 className="h-8 w-8 text-green-600" />
+            <p className="text-sm text-slate-600">
+              {result.created ? "This quote is now a scheduled job." : "This quote was already converted."}
+            </p>
+            <p className="font-serif text-2xl font-bold text-navy" data-testid="result-job-number">
+              {result.job_number}
+            </p>
+          </div>
+          <p className="text-center text-xs text-slate-400">
+            The quote status is now <strong>Converted</strong>.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-5">
+          {prefilling && (
+            <p className="text-xs text-slate-400">Prefilling from the linked lead…</p>
+          )}
+          <p className="text-xs text-slate-500">
+            Confirm the schedule and route for this move. Fields prefill from the linked lead where
+            available but remain editable — the server validates the final values.
+          </p>
+
+          <div>
+            <Label>Scheduled start *</Label>
+            <Input
+              data-testid="schedule-start"
+              type="datetime-local"
+              value={form.scheduled_start}
+              onChange={(e) => upd("scheduled_start", e.target.value)}
+            />
+          </div>
+
+          <div>
+            <Label>Scheduled end</Label>
+            <Input
+              data-testid="schedule-end"
+              type="datetime-local"
+              value={form.scheduled_end}
+              onChange={(e) => upd("scheduled_end", e.target.value)}
+            />
+          </div>
+
+          <div>
+            <Label>Origin address *</Label>
+            <div className="relative">
+              <MapPin className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Input
+                data-testid="schedule-origin"
+                placeholder="Pickup address"
+                value={form.origin_address}
+                onChange={(e) => upd("origin_address", e.target.value)}
+                className="pl-8"
+              />
+            </div>
+          </div>
+
+          <div>
+            <Label>Destination address *</Label>
+            <div className="relative">
+              <MapPin className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-accent" />
+              <Input
+                data-testid="schedule-destination"
+                placeholder="Drop-off address"
+                value={form.destination_address}
+                onChange={(e) => upd("destination_address", e.target.value)}
+                className="pl-8"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Crew size</Label>
+              <Input
+                data-testid="schedule-crew-size"
+                type="number"
+                min="0"
+                step="1"
+                placeholder="2"
+                value={form.crew_size}
+                onChange={(e) => upd("crew_size", e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>Truck count</Label>
+              <Input
+                data-testid="schedule-truck-count"
+                type="number"
+                min="0"
+                step="1"
+                placeholder="1"
+                value={form.truck_count}
+                onChange={(e) => upd("truck_count", e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div>
+            <Label>Dispatch notes</Label>
+            <textarea
+              data-testid="schedule-dispatch-notes"
+              rows={3}
+              value={form.dispatch_notes}
+              onChange={(e) => upd("dispatch_notes", e.target.value)}
+              placeholder="Access, parking, elevator, fragile items…"
+              className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+            />
+          </div>
+        </div>
+      )}
+    </Drawer>
   );
 }
