@@ -428,3 +428,19 @@ read-only verification JSON → then frontend/RPCs wired.
   resolution {sharp: 0.35.3} so it stays patched + non-fatal. postcss 8.5.22 resolution kept.
   Result: audit still 0 vulnerabilities; tsc PASS; yarn build PASS (16/16 static pages). Preview
   healthy (home 200, /dashboard→307). Ready for redeploy.
+
+- **PROD SSR CONFIG (2026-07-24):** Production showed default nginx page because Emergent's managed
+  deploy base image (fastapi_react_mongo_shadcn_base_image_cloud_arm) serves a STATIC frontend via
+  nginx, but this is a Next.js SSR app needing a persistent Node server. Code-side made SSR-ready:
+  frontend/package.json scripts now {dev: next dev -p 3000 -H 0.0.0.0, build: next build,
+  start: next start -H 0.0.0.0 (honors process.env.PORT), lint} (removed start:prod); added
+  next.config.js `outputFileTracingRoot: __dirname` (fixes dual-lockfile workspace-root inference).
+  Clean prod build (rm -rf .next && next build) + `next start` VERIFIED IN PREVIEW: runs
+  next-server v15.5.21 as a Node process; / 200 (hero renders), /login 200, /dashboard,/portal,
+  /mobile 307 (middleware), /q/token 200; no 500s. tsc PASS; audit still 0 vulns.
+  ⚠️ PLATFORM LIMITATION (NOT fixed by me): I have no access to the production environment and cannot
+  change the managed base image, its build/run pipeline, or production nginx. A repo Dockerfile/
+  nginx.conf is not honored by the managed deploy. So production will keep serving the nginx default
+  until Emergent runs `npm run start` (Node server) and proxies nginx to it. Requires Emergent
+  Support / a Next.js-SSR-capable deploy image. NOTE: preview now runs prod mode (no hot reload);
+  after code edits, rebuild (rm -rf .next && yarn build) + restart frontend.
