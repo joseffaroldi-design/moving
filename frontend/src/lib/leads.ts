@@ -107,3 +107,38 @@ export async function updateLeadStatus(id: string, status: LeadStatus): Promise<
   const { error } = await supabase.from("leads").update({ status }).eq("id", id);
   if (error) throw new Error(error.message);
 }
+
+// Editable lead-owned fields (excludes id/company_id/created_by/created_at/status
+// and all authorization/system columns — those are never client-editable).
+export interface LeadEditInput {
+  source: string | null;
+  move_date: string | null;
+  origin_address: string | null;
+  destination_address: string | null;
+  bedrooms: number | null;
+  estimated_volume_cuft: number | null;
+  notes: string | null;
+}
+
+export async function updateLead(id: string, input: LeadEditInput): Promise<void> {
+  const supabase = getBrowserClient();
+  const { error } = await supabase.from("leads").update(input).eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
+// Contact fields live on the linked customers row (not the lead).
+export interface CustomerContactInput {
+  first_name: string;
+  last_name: string;
+  email: string | null;
+  phone: string | null;
+}
+
+export async function updateCustomerContact(
+  customerId: string,
+  input: CustomerContactInput
+): Promise<void> {
+  const supabase = getBrowserClient();
+  const { error } = await supabase.from("customers").update(input).eq("id", customerId);
+  if (error) throw new Error(error.message);
+}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Search, Plus, StickyNote, MapPin } from "lucide-react";
+import { Search, Plus, StickyNote, MapPin, Pencil } from "lucide-react";
 import { useDashboardData } from "@/components/data/DashboardProvider";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { PageHeader } from "@/components/ui/page-header";
@@ -19,9 +19,13 @@ import { leadName, addr, leadVolume, contactEmail, contactPhone } from "@/lib/en
 import {
   LEAD_STATUSES,
   fetchLeads,
+  fetchLeadById,
   createLeadWithCustomer,
   updateLeadStatus,
+  updateLead,
+  updateCustomerContact,
   type LeadRecord,
+  type LeadCustomer,
   type LeadStatus,
 } from "@/lib/leads";
 import { fetchLeadNotes, addLeadNote, type LeadNote } from "@/lib/leadNotes";
@@ -222,6 +226,19 @@ export default function LeadsPage() {
           setLeads((prev) => prev.map((l) => (l.id === id ? { ...l, status: s } : l)));
           setSelected((prev) => (prev && prev.id === id ? { ...prev, status: s } : prev));
         }}
+        onSaved={async (id) => {
+          try {
+            const fresh = await fetchLeadById(id);
+            if (fresh) {
+              setLeads((prev) => prev.map((l) => (l.id === id ? fresh : l)));
+              setSelected(fresh);
+            } else {
+              load();
+            }
+          } catch {
+            load();
+          }
+        }}
       />
     </div>
   );
@@ -359,6 +376,27 @@ function NewLeadDrawer({
   );
 }
 
+function customerOf(lead: LeadRecord): (LeadCustomer & Record<string, unknown>) | null {
+  const c = (lead.customers ?? (lead as Record<string, unknown>).customer) as unknown;
+  if (Array.isArray(c)) return (c[0] as LeadCustomer & Record<string, unknown>) ?? null;
+  if (c && typeof c === "object") return c as LeadCustomer & Record<string, unknown>;
+  return null;
+}
+
+const EMPTY_EDIT = {
+  first_name: "",
+  last_name: "",
+  email: "",
+  phone: "",
+  source: "",
+  move_date: "",
+  origin_address: "",
+  destination_address: "",
+  bedrooms: "",
+  estimated_volume_cuft: "",
+  notes: "",
+};
+
 function LeadDetailDrawer({
   lead,
   onClose,
@@ -366,6 +404,7 @@ function LeadDetailDrawer({
   companyId,
   userId,
   onStatusChanged,
+  onSaved,
 }: {
   lead: LeadRecord | null;
   onClose: () => void;
@@ -373,6 +412,7 @@ function LeadDetailDrawer({
   companyId: string | null;
   userId: string | null;
   onStatusChanged: (id: string, status: LeadStatus) => void;
+  onSaved: (id: string) => void;
 }) {
   const toast = useToast();
   const [notes, setNotes] = useState<LeadNote[]>([]);
@@ -381,9 +421,15 @@ function LeadDetailDrawer({
   const [posting, setPosting] = useState(false);
   const [savingStatus, setSavingStatus] = useState(false);
 
+  const [editing, setEditing] = useState(false);
+  const [editForm, setEditForm] = useState(EMPTY_EDIT);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const savingEditRef = useRef(false);
+
   useEffect(() => {
     setNoteBody("");
     setNotes([]);
+    setEditing(false);
     if (lead?.id && companyId) {
       setNotesLoading(true);
       fetchLeadNotes(lead.id)
@@ -392,6 +438,84 @@ function LeadDetailDrawer({
         .finally(() => setNotesLoading(false));
     }
   }, [lead?.id, companyId]);
+
+  function startEdit() {
+    if (!lead) return;
+    const c = customerOf(lead);
+    setEditForm({
+      first_name: (c?.first_name as string) ?? "",
+      last_name: (c?.last_name as string) ?? "",
+      email: contactEmail(lead) ?? "",
+      phone: contactPhone(lead) ?? "",
+      source: (lead.source as string) ?? "",
+      move_date: ((lead.move_date as string) ?? "").slice(0, 10),
+      origin_address: (lead.origin_address as string) ?? "",
+      destination_address: (lead.destination_address as string) ?? "",
+      bedrooms: lead.bedrooms != null ? String(lead.bedrooms) : "",
+      estimated_volume_cuft:
+        lead.estimated_volume_cuft != null ? String(lead.estimated_volume_cuft) : "",
+      notes: (lead.notes as string) ?? "",
+    });
+    setEditing(true);
+  }
+
+  function updE<K extends keyof typeof EMPTY_EDIT>(k: K, v: string) {
+    setEditForm((f) => ({ ...f, [k]: v }));
+  }
+
+  async function saveEdit() {
+    if (!lead || savingEditRef.current) return;
+    if (!editForm.first_name.trim() || !editForm.last_name.trim()) {
+      toast("Customer first and last name are required.", "error");
+      return;
+    }
+    const email = editForm.email.trim();
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      toast("Enter a valid email address.", "error");
+      return;
+    }
+    const bedrooms = editForm.bedrooms.trim();
+    if (bedrooms && (isNaN(Number(bedrooms)) || Number(bedrooms) < 0)) {
+      toast("Bedrooms must be a non-negative number.", "error");
+      return;
+    }
+    const vol = editForm.estimated_volume_cuft.trim();
+    if (vol && (isNaN(Number(vol)) || Number(vol) < 0)) {
+      toast("Estimated volume must be a non-negative number.", "error");
+      return;
+    }
+    savingEditRef.current = true;
+    setSavingEdit(true);
+    try {
+      const c = customerOf(lead);
+      if (c?.id) {
+        await updateCustomerContact(c.id as string, {
+          first_name: editForm.first_name.trim(),
+          last_name: editForm.last_name.trim(),
+          email: email || null,
+          phone: editForm.phone.trim() || null,
+        });
+      }
+      await updateLead(lead.id, {
+        source: editForm.source.trim() || null,
+        move_date: editForm.move_date || null,
+        origin_address: editForm.origin_address.trim() || null,
+        destination_address: editForm.destination_address.trim() || null,
+        bedrooms: bedrooms ? Number(bedrooms) : null,
+        estimated_volume_cuft: vol ? Number(vol) : null,
+        notes: editForm.notes.trim() || null,
+      });
+      toast("Lead updated.", "success");
+      setEditing(false);
+      onSaved(lead.id);
+    } catch (e) {
+      // Preserve entered values so the user can retry without re-typing.
+      toast(e instanceof Error ? e.message : "Could not update lead.", "error");
+    } finally {
+      savingEditRef.current = false;
+      setSavingEdit(false);
+    }
+  }
 
   async function changeStatus(s: LeadStatus) {
     if (!lead) return;
@@ -432,7 +556,34 @@ function LeadDetailDrawer({
   }
 
   return (
-    <Drawer open={!!lead} onClose={onClose} title={lead ? leadName(lead) : ""}>
+    <Drawer
+      open={!!lead}
+      onClose={onClose}
+      title={lead ? leadName(lead) : ""}
+      footer={
+        editing ? (
+          <div className="flex gap-2">
+            <Button
+              variant="gold"
+              className="flex-1"
+              loading={savingEdit}
+              onClick={saveEdit}
+              data-testid="save-lead-edit"
+            >
+              Save Changes
+            </Button>
+            <Button
+              variant="outline"
+              disabled={savingEdit}
+              onClick={() => setEditing(false)}
+              data-testid="cancel-lead-edit"
+            >
+              Cancel
+            </Button>
+          </div>
+        ) : undefined
+      }
+    >
       {lead && (
         <div className="space-y-5">
           <div className="flex items-center justify-between">
@@ -442,7 +593,7 @@ function LeadDetailDrawer({
                 <Select
                   data-testid="lead-status-select"
                   value={lead.status}
-                  disabled={savingStatus}
+                  disabled={savingStatus || editing}
                   onChange={(e) => changeStatus(e.target.value as LeadStatus)}
                 >
                   {LEAD_STATUSES.map((s) => (
@@ -454,51 +605,119 @@ function LeadDetailDrawer({
             <span className="text-xs text-slate-400">Created {formatDate(lead.created_at as string)}</span>
           </div>
 
-          <div className="space-y-1">
-            <DetailRow label="Email" value={contactEmail(lead) || "—"} />
-            <DetailRow label="Phone" value={contactPhone(lead) || "—"} />
-            <DetailRow label="Origin" value={addr(lead, "origin")} />
-            <DetailRow label="Destination" value={addr(lead, "destination")} />
-            <DetailRow label="Move Date" value={formatDate(lead.move_date as string)} />
-            <DetailRow label="Estimated Volume" value={leadVolume(lead)} />
-            <DetailRow label="Source" value={titleCase((lead.source ?? "") as string) || "—"} />
-          </div>
-
-          {/* Notes */}
-          <div>
-            <h4 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
-              <StickyNote className="h-3.5 w-3.5" /> Notes
-            </h4>
-            {canWrite && (
-              <div className="mb-3 space-y-2">
+          {editing ? (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <Label>First name *</Label>
+                <Input data-testid="edit-first-name" value={editForm.first_name} onChange={(e) => updE("first_name", e.target.value)} />
+              </div>
+              <div>
+                <Label>Last name *</Label>
+                <Input data-testid="edit-last-name" value={editForm.last_name} onChange={(e) => updE("last_name", e.target.value)} />
+              </div>
+              <div>
+                <Label>Email</Label>
+                <Input data-testid="edit-email" type="email" value={editForm.email} onChange={(e) => updE("email", e.target.value)} />
+              </div>
+              <div>
+                <Label>Phone</Label>
+                <Input data-testid="edit-phone" value={editForm.phone} onChange={(e) => updE("phone", e.target.value)} />
+              </div>
+              <div>
+                <Label>Source</Label>
+                <Input data-testid="edit-source" value={editForm.source} onChange={(e) => updE("source", e.target.value)} placeholder="Website, referral…" />
+              </div>
+              <div>
+                <Label>Move date</Label>
+                <Input data-testid="edit-move-date" type="date" value={editForm.move_date} onChange={(e) => updE("move_date", e.target.value)} />
+              </div>
+              <div className="sm:col-span-2">
+                <Label>Origin address</Label>
+                <Input data-testid="edit-origin" value={editForm.origin_address} onChange={(e) => updE("origin_address", e.target.value)} />
+              </div>
+              <div className="sm:col-span-2">
+                <Label>Destination address</Label>
+                <Input data-testid="edit-destination" value={editForm.destination_address} onChange={(e) => updE("destination_address", e.target.value)} />
+              </div>
+              <div>
+                <Label>Bedrooms</Label>
+                <Input data-testid="edit-bedrooms" type="number" min="0" value={editForm.bedrooms} onChange={(e) => updE("bedrooms", e.target.value)} />
+              </div>
+              <div>
+                <Label>Est. volume (cu ft)</Label>
+                <Input data-testid="edit-volume" type="number" min="0" value={editForm.estimated_volume_cuft} onChange={(e) => updE("estimated_volume_cuft", e.target.value)} />
+              </div>
+              <div className="sm:col-span-2">
+                <Label>Notes</Label>
                 <textarea
-                  data-testid="note-body-input"
-                  value={noteBody}
-                  onChange={(e) => setNoteBody(e.target.value)}
-                  rows={2}
-                  placeholder="Add a note about this lead…"
+                  data-testid="edit-notes"
+                  value={editForm.notes}
+                  onChange={(e) => updE("notes", e.target.value)}
+                  rows={3}
                   className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
                 />
-                <Button size="sm" variant="gold" loading={posting} onClick={postNote} data-testid="add-note-button">
-                  Add Note
-                </Button>
               </div>
-            )}
-            {notesLoading ? (
-              <p className="text-sm text-slate-400">Loading notes…</p>
-            ) : notes.length === 0 ? (
-              <p className="text-sm text-slate-400">No notes yet.</p>
-            ) : (
-              <ul className="space-y-2" data-testid="lead-notes-list">
-                {notes.map((n) => (
-                  <li key={n.id} className="rounded-md border border-slate-200 bg-slate-50 p-3">
-                    <p className="whitespace-pre-wrap text-sm text-slate-700">{n.body}</p>
-                    <p className="mt-1 text-[11px] text-slate-400">{formatDate(n.created_at)}</p>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+            </div>
+          ) : (
+            <>
+              {canWrite && (
+                <div className="flex justify-end">
+                  <Button size="sm" variant="outline" onClick={startEdit} data-testid="edit-lead-button">
+                    <Pencil className="h-4 w-4" /> Edit lead
+                  </Button>
+                </div>
+              )}
+              <div className="space-y-1">
+                <DetailRow label="Email" value={contactEmail(lead) || "—"} />
+                <DetailRow label="Phone" value={contactPhone(lead) || "—"} />
+                <DetailRow label="Origin" value={addr(lead, "origin")} />
+                <DetailRow label="Destination" value={addr(lead, "destination")} />
+                <DetailRow label="Move Date" value={formatDate(lead.move_date as string)} />
+                <DetailRow label="Estimated Volume" value={leadVolume(lead)} />
+                <DetailRow label="Bedrooms" value={lead.bedrooms != null ? String(lead.bedrooms) : "—"} />
+                <DetailRow label="Source" value={titleCase((lead.source ?? "") as string) || "—"} />
+                <DetailRow label="Notes" value={(lead.notes as string) || "—"} />
+              </div>
+            </>
+          )}
+
+          {/* Append-only lead notes — a separate action from Edit. */}
+          {!editing && (
+            <div>
+              <h4 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                <StickyNote className="h-3.5 w-3.5" /> Notes
+              </h4>
+              {canWrite && (
+                <div className="mb-3 space-y-2">
+                  <textarea
+                    data-testid="note-body-input"
+                    value={noteBody}
+                    onChange={(e) => setNoteBody(e.target.value)}
+                    rows={2}
+                    placeholder="Add a note about this lead…"
+                    className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+                  />
+                  <Button size="sm" variant="gold" loading={posting} onClick={postNote} data-testid="add-note-button">
+                    Add Note
+                  </Button>
+                </div>
+              )}
+              {notesLoading ? (
+                <p className="text-sm text-slate-400">Loading notes…</p>
+              ) : notes.length === 0 ? (
+                <p className="text-sm text-slate-400">No notes yet.</p>
+              ) : (
+                <ul className="space-y-2" data-testid="lead-notes-list">
+                  {notes.map((n) => (
+                    <li key={n.id} className="rounded-md border border-slate-200 bg-slate-50 p-3">
+                      <p className="whitespace-pre-wrap text-sm text-slate-700">{n.body}</p>
+                      <p className="mt-1 text-[11px] text-slate-400">{formatDate(n.created_at)}</p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
         </div>
       )}
     </Drawer>
