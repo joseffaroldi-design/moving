@@ -254,7 +254,21 @@ read-only verification JSON → then frontend/RPCs wired.
   DEFERRED until invoices + payroll_entries get their own grant/RLS lockdown (avoids
   partial/misleading financials via underlying RLS). Verify query confirmed all counts.
   Rows preserved: jobs=1, job_profitability=1, rest 0.
-- **0016b (quote→job conversion) — NOT YET AUTHORED.** Deferred pending user requirements.
+- **0016b_quote_to_job_conversion.sql — APPLIED & VERIFIED (full PASS).** Single txn.
+  Adds: (1) transactional duplicate guard + PARTIAL UNIQUE index jobs_quote_id_unique
+  (quote_id where not null) = one job per quote at DB level; (2) next_job_number(uuid)
+  internal advisory-lock helper, 'J-0001', EXECUTE revoked from public/anon/authenticated;
+  (3) _require_job_converter() internal authz for {owner,operations_manager,dispatcher,sales};
+  (4) convert_quote_to_job(p_quote_id, p_scheduled_start[req], p_origin_address[req],
+  p_destination_address[req], p_scheduled_end?, p_crew_size?, p_truck_count?,
+  p_dispatch_notes?) — SECURITY DEFINER, pinned search_path, authenticated EXECUTE only.
+  Behaviour: only 'accepted' quotes convert; company/customer/actor derived server-side +
+  cross-company checks; validates addresses(trim)/end>start/nonneg counts; creates job
+  status='scheduled' + flips quote to 'converted' atomically. IDEMPOTENT: if a job already
+  exists for the quote, returns existing {job_id, job_number, created:false} (no new job, no
+  error); concurrent-race unique_violation caught -> same idempotent return. Verify confirmed
+  all 15 summary checks. Job tables remain locked (no client write reopened).
+- Rollback SQL provided (drops 3 fns + index; does NOT un-convert existing jobs).
 
 ### Deferred (Phase 5+ backlog)
 - Restore `job_profitability` access (authenticated SELECT + guarded RPC) AFTER invoices +
