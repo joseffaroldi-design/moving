@@ -317,3 +317,20 @@ read-only verification JSON → then frontend/RPCs wired.
   same-status = idempotent success. Do NOT use job_status_events for the 5-value lifecycle.
 - **NEXT:** dispatch_days read-only preflight (delivered) -> then 0017b (job status RPC) ->
   0017c (assignment RPCs) -> frontend.
+
+- **0017c_job_status_transitions.sql — APPLIED & VERIFIED (full PASS).** set_job_status(p_job_id,
+  p_status) SECURITY DEFINER + pinned search_path, internal _require_job_status_setter guard
+  {owner,operations_manager,dispatcher}. Legal matrix: scheduled→confirmed→in_progress→completed;
+  any non-terminal→cancelled; completed/cancelled terminal; block backward/skips; same-status
+  idempotent no-write. Does NOT touch job_status_events (dispatch_status). authenticated EXECUTE only.
+- **0017d_dispatch_assignment_rpcs.sql — APPLIED & VERIFIED (full PASS).** 3 RPCs +
+  internal _require_dispatcher {owner,operations_manager,dispatcher}: assign_job_to_dispatch
+  (get-or-create dispatch_day via advisory lock; upsert dispatch_assignments on (day,job);
+  HARD-BLOCK truck/crew_lead double-booking on a day — overlapping windows, or any same-day
+  booking when either side lacks a full window; error names resource+conflicting job; atomic
+  sync crew_lead→job_crew(crew_lead) + primary truck→job_trucks), set_job_crew (replace roster,
+  re-assert assigned leads), set_job_trucks (replace list, re-assert primaries). All SECURITY
+  DEFINER, pinned search_path, authenticated EXECUTE only. NOTE: crew-lead display-name lookup
+  uses to_jsonb(profiles)->>key (column-safe) because profiles has no full_name column — a
+  direct column ref aborted CREATE (check_function_bodies) on the first attempt; fixed.
+  **Phase 6 BACKEND COMPLETE & VERIFIED. Frontend pending.**
