@@ -228,3 +228,36 @@ Stored subtotal=gross_subtotal. Labor is scalar-only (UI must not add labor line
   approval-link round-trip (create link → public /q/<token> → approve → status flips → link single-use).
 - ZZZTEST cleanup SQL provided.
 - NEXT: 0016 quote→job conversion handoff (begins Phase 5: Jobs).
+
+## Phase 5 — Jobs (2026-06, IN PROGRESS)
+Same strict workflow: agent authors additive SQL → user runs manually → returns
+read-only verification JSON → then frontend/RPCs wired.
+
+### Backend migrations
+- **preflight_0016a_jobs_schema.sql — RUN & returned.** Confirmed: 8 job tables are
+  ordinary tables (relkind 'r'), `job_profitability` is a VIEW (owner postgres,
+  security_invoker=true; depends on jobs, quotes, invoices, job_expenses,
+  payroll_entries). All 7 real child tables FK `job_id → jobs(id) ON DELETE CASCADE`.
+  job_crew + job_trucks have NO own company_id (only job_id + profile/truck id);
+  the other children + jobs have NOT-NULL company_id. job_expenses.job_id is NULLABLE.
+  Pre-lockdown: anon + authenticated held full DML+TRUNCATE on everything (P0).
+- **0016a_jobs_grant_lockdown.sql — APPLIED & VERIFIED (full PASS).** Single txn.
+  Aborts if any job_expenses.job_id (non-null) points to a job in a different company
+  (verified 0 mismatches). On the 8 tables: anon/PUBLIC stripped; authenticated →
+  SELECT only; RLS enabled + FORCED; all old broad policies (is_company_member /
+  can_dispatch_company / can_manage_company / FOR ALL) dropped; exactly ONE staff SELECT
+  policy each. Reads: jobs + job_checklists/job_photos/job_status_events/job_stops via own
+  company_id for {owner,operations_manager,dispatcher,sales}; job_crew + job_trucks via
+  parent jobs.company_id (same 4 roles); job_expenses (FINANCIAL) {owner,operations_manager}
+  only on own company_id + null-safe parent-match guard. `job_profitability` VIEW: revoke
+  ALL from anon/PUBLIC/authenticated (NO definition/owner change, NO re-grant) — access
+  DEFERRED until invoices + payroll_entries get their own grant/RLS lockdown (avoids
+  partial/misleading financials via underlying RLS). Verify query confirmed all counts.
+  Rows preserved: jobs=1, job_profitability=1, rest 0.
+- **0016b (quote→job conversion) — NOT YET AUTHORED.** Deferred pending user requirements.
+
+### Deferred (Phase 5+ backlog)
+- Restore `job_profitability` access (authenticated SELECT + guarded RPC) AFTER invoices +
+  payroll_entries lockdown.
+- Job write RPCs (SECURITY DEFINER, mirroring quotes 0014): create/update job, status
+  transitions, dispatch (crew/truck assignment), crew-mobile append-only events.
