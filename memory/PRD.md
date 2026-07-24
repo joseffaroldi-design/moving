@@ -188,3 +188,34 @@ Stored subtotal=gross_subtotal. Labor is scalar-only (UI must not add labor line
    least-privilege temp sales account (NOT a 2nd owner).
 3. Then Phase 4 remainder: 0015 approval tokens (customer view/approve/decline), 0016
    quote→job conversion handoff (Phase 5).
+
+## Phase 4 — Quotes UPDATE (2026-07)
+- **0014 APPLIED & VERIFIED.** Pricing columns + 3 CHECK constraints + 8 SECURITY DEFINER
+  fns + 2 INVOKER validators. PUBLIC/anon blocked; authenticated → 6 client RPCs only.
+  Corrections folded in: lead/customer-mismatch rejection, strict JSON-array + per-item
+  numeric/blank/negative validation, expiry guards. `QUOTES_WRITE_ENABLED=true`.
+- **Six write flows:** Step 1 CREATE + Step 2 EDIT confirmed by owner (Q-0001). Steps 3-6
+  (duplicate/send/expire/cancel) guided; owner proceeded to 0015 (treat as passed unless
+  owner reports otherwise). Cleanup SQL for ZZZTEST quotes provided.
+- **0015 APPLIED & VERIFIED (approval tokens).** SHA-256 hashed, 256-bit, single-use,
+  revocable, expiring; table RLS-forced + zero client grants. Issuance staff-only;
+  view/respond token-bearer (anon ok). Added respond_to_quote_approval expiry guard vs.
+  user's uploaded draft.
+- **Frontend token flow built (tsc PASS, routes serve):** quotes.ts +createQuoteApprovalLink/
+  revokeQuoteApprovalLinks/getQuoteByApprovalToken/respondToQuoteApproval + PublicQuote.
+  Quote detail drawer: staff "Create/Copy/Regenerate/Revoke approval link" (statuses
+  draft/sent/viewed). New PUBLIC page `src/app/q/[token]/page.tsx` (outside protected
+  middleware) — branded view + Approve/Decline via token RPCs; loading/error/decided states.
+- **Security re-verified via live API:** anon get/respond return generic invalid-link error
+  (no enumeration); anon create_link → 401. Positive path (staff creates link → customer
+  approves) needs manual owner session (not auto-testable under no-credential rule).
+- **middleware.ts** hardened: carries refreshed auth cookies onto the login redirect to
+  prevent token-refresh redirect loops.
+- **OP NOTE:** never run `yarn build` against the live `next dev` server — it corrupts
+  `.next` (webpack-runtime 500s). Use `tsc --noEmit` for verification; if corrupted:
+  `rm -rf .next && supervisorctl restart frontend`.
+
+## Remaining
+- Owner: confirm Steps 3-6 + the approval-link round trip (create link → open /q/<token> →
+  approve/decline → status flips to accepted/rejected).
+- 0016 quote→job conversion handoff (Phase 5 Jobs).

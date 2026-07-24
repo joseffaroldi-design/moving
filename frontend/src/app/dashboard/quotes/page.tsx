@@ -14,6 +14,8 @@ import {
   Trash2,
   Lock,
   AlertTriangle,
+  Link2,
+  Check,
 } from "lucide-react";
 import { useDashboardData } from "@/components/data/DashboardProvider";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -48,6 +50,8 @@ import {
   markQuoteSent,
   expireQuote,
   cancelQuote,
+  createQuoteApprovalLink,
+  revokeQuoteApprovalLinks,
   type QuoteRecord,
   type QuoteLineItem,
 } from "@/lib/quotes";
@@ -768,9 +772,14 @@ function QuoteDetailDrawer({
   const [itemsLoading, setItemsLoading] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [link, setLink] = useState<{ url: string; expires: string } | null>(null);
+  const [linkBusy, setLinkBusy] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     setItems([]);
+    setLink(null);
+    setCopied(false);
     if (quote?.id) {
       setItemsLoading(true);
       fetchQuoteLineItems(quote.id)
@@ -806,6 +815,43 @@ function QuoteDetailDrawer({
   }
 
   const disabledTitle = canWrite ? undefined : BACKEND_REQUIRED_MSG;
+
+  const linkable = ["draft", "sent", "viewed"].includes(quote.status);
+
+  async function createLink() {
+    setLinkBusy("create");
+    try {
+      const res = await createQuoteApprovalLink(quote!.id);
+      setLink({ url: `${window.location.origin}/q/${res.token}`, expires: res.expires_at });
+      setCopied(false);
+      toast("Approval link created.", "success");
+      onChanged();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Could not create link.", "error");
+    } finally {
+      setLinkBusy(null);
+    }
+  }
+
+  async function revokeLinks() {
+    setLinkBusy("revoke");
+    try {
+      const r = await revokeQuoteApprovalLinks(quote!.id);
+      setLink(null);
+      toast(`Revoked ${r.revoked_count} active link(s).`, "success");
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Could not revoke links.", "error");
+    } finally {
+      setLinkBusy(null);
+    }
+  }
+
+  function copyLink() {
+    if (!link) return;
+    navigator.clipboard.writeText(link.url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
 
   return (
     <>
@@ -908,6 +954,64 @@ function QuoteDetailDrawer({
               {formatCurrency(quote.total ?? quote.subtotal)}
             </span>
           </div>
+
+          {canWrite && linkable && (
+            <div className="rounded-md border border-slate-200 p-3" data-testid="approval-link-section">
+              <h4 className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                Customer Approval Link
+              </h4>
+              {link ? (
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    <Input
+                      readOnly
+                      value={link.url}
+                      data-testid="approval-link-url"
+                      onFocus={(e) => e.currentTarget.select()}
+                      className="text-xs"
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={copyLink}
+                      data-testid="copy-approval-link"
+                    >
+                      {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                      {copied ? "Copied" : "Copy"}
+                    </Button>
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    Expires {formatDate(link.expires)}. The raw link is shown once — copy it now.
+                  </p>
+                </div>
+              ) : (
+                <p className="text-xs text-slate-500">
+                  Generate a secure link the customer can open to view and approve or decline this
+                  quote — no account required. Creating a link marks the quote as Sent.
+                </p>
+              )}
+              <div className="mt-2 flex gap-2">
+                <Button
+                  size="sm"
+                  variant="gold"
+                  loading={linkBusy === "create"}
+                  onClick={createLink}
+                  data-testid="create-approval-link"
+                >
+                  <Link2 className="h-3.5 w-3.5" /> {link ? "Regenerate" : "Create link"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="subtle"
+                  loading={linkBusy === "revoke"}
+                  onClick={revokeLinks}
+                  data-testid="revoke-approval-links"
+                >
+                  Revoke links
+                </Button>
+              </div>
+            </div>
+          )}
 
           <div>
             <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">

@@ -284,3 +284,79 @@ export async function cancelQuote(quoteId: string) {
   if (error) throw new Error(error.message);
   return data as { quote_id: string; status: string };
 }
+
+// ---------------------------------------------------------------------------
+// Approval links (migration 0015). Issuance is staff-only; view/respond are
+// token-bearer (work for anon — customer needs no account).
+// ---------------------------------------------------------------------------
+export interface ApprovalLinkResult {
+  quote_id: string;
+  token: string;
+  expires_at: string;
+}
+
+export interface PublicQuoteLineItem {
+  description: string;
+  quantity: number;
+  unit_price: number;
+  total: number;
+  sort_order: number;
+}
+
+export interface PublicQuote {
+  id: string;
+  quote_number: string;
+  status: string;
+  created_at: string;
+  expires_at: string | null;
+  hourly_rate: number | null;
+  estimated_hours: number | null;
+  travel_fee: number | null;
+  packing_fee: number | null;
+  materials_fee: number | null;
+  discount: number | null;
+  subtotal: number | null;
+  tax_rate: number | null;
+  tax: number | null;
+  total: number | null;
+  deposit_percent: number | null;
+  deposit_amount: number | null;
+  customer: { first_name: string | null; last_name: string | null };
+  line_items: PublicQuoteLineItem[];
+}
+
+export async function createQuoteApprovalLink(
+  quoteId: string,
+  expiresAt?: string
+): Promise<ApprovalLinkResult> {
+  const supabase = getBrowserClient();
+  const args: Record<string, unknown> = { p_quote_id: quoteId };
+  if (expiresAt) args.p_expires_at = expiresAt;
+  const { data, error } = await supabase.rpc("create_quote_approval_link", args);
+  if (error) throw new Error(error.message);
+  return data as ApprovalLinkResult;
+}
+
+export async function revokeQuoteApprovalLinks(quoteId: string) {
+  const supabase = getBrowserClient();
+  const { data, error } = await supabase.rpc("revoke_quote_approval_links", { p_quote_id: quoteId });
+  if (error) throw new Error(error.message);
+  return data as { quote_id: string; revoked_count: number };
+}
+
+export async function getQuoteByApprovalToken(token: string): Promise<PublicQuote> {
+  const supabase = getBrowserClient();
+  const { data, error } = await supabase.rpc("get_quote_by_approval_token", { p_token: token });
+  if (error) throw new Error(error.message);
+  return data as PublicQuote;
+}
+
+export async function respondToQuoteApproval(token: string, decision: "accept" | "decline") {
+  const supabase = getBrowserClient();
+  const { data, error } = await supabase.rpc("respond_to_quote_approval", {
+    p_token: token,
+    p_decision: decision,
+  });
+  if (error) throw new Error(error.message);
+  return data as { quote_id: string; status: string };
+}
