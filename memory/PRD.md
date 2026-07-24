@@ -406,3 +406,14 @@ read-only verification JSON → then frontend/RPCs wired.
   Dispatch, /q/<token> approval page. NOT YET DEPLOYED — awaiting user approval.
   NOTE: supervisor runs `yarn start` = `next dev` (hot reload); prod serving would use `start:prod`
   (`next start`). After a `yarn build`, restart frontend to clear a transient dev 404.
+
+- **LEADS EDIT ACTION (2026-07-24):** Added "Edit lead" to the lead detail drawer (authorized staff
+  only) so incomplete/incorrect leads can be corrected. Files: src/lib/leads.ts (new updateLead +
+  updateCustomerContact helpers using existing authenticated UPDATE paths) and
+  src/app/dashboard/leads/page.tsx (edit mode in LeadDetailDrawer + parent refetch-on-save via
+  fetchLeadById). Editable: first/last name, email, phone (customers row) + source, move_date,
+  origin, destination, bedrooms, estimated_volume_cuft, notes (leads row). NOT editable: id,
+  company_id, created_by, created_at, status; no Delete. Validation (name required, email format,
+  non-negative numbers), preserves entered values on failure, success/error toasts, refreshes list +
+  drawer. Status change + append-only lead_notes remain separate actions. No RLS/grants/migrations
+  changed. tsc PASS; yarn build PASS. Owner verified editing the incomplete `j h` test lead — "works".
