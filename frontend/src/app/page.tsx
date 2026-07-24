@@ -23,7 +23,7 @@ import { BRAND } from "@/lib/brand";
 
 // ── Easily editable content ────────────────────────────────────────────────
 const HERO_IMAGE =
-  "https://images.unsplash.com/photo-1614359835514-92f8ba196357?auto=format&fit=crop&w=1400&q=80";
+  "https://images.pexels.com/photos/7464393/pexels-photo-7464393.jpeg?auto=compress&cs=tinysrgb&w=1400&q=80";
 
 const NAV = [
   { label: "Services", href: "#services" },
