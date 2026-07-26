@@ -60,5 +60,5 @@ Rollback: NOT DOCUMENTED · PRODUCTION READY: **NO**
 ## Repo changes this session (verified)
 - frontend/next.config.js: security headers + poweredByHeader:false + PII no-store. Verified: next build OK,
   curl headers OK, testing_agent iteration_6 = 100% frontend pass, no CSP violations. Rollback: revert headers() block.
-- supabase/migrations/0019_companies_anon_revoke.sql: authored, NOT run (B4). Rollback embedded.
+- supabase/migrations/0020_companies_anon_revoke.sql: authored, NOT run (B4). Rollback embedded.
 - Observation (defer): benign non-CSP 400 on unauth pages (likely Supabase session probe) — not introduced by change.

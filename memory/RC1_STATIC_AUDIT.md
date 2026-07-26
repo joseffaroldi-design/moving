@@ -93,12 +93,12 @@ Established (do not re-litigate): B1 CRITICAL, B2 CRITICAL, B3 HIGH, B4 MEDIUM. 
   (all sibling business tables are anon-denied). Harmless TODAY only because RLS returns 0 rows to anon — i.e.
   DANGEROUS under future policy drift (no second barrier). The public homepage uses no company data; mvp-dashboard
   reads under the service role (unaffected by revoking anon).
-- REMEDIATION PREPARED (not run): `0019_companies_anon_revoke.sql` — idempotent revoke + verify + rollback. Kept
+- REMEDIATION PREPARED (not run): `0020_companies_anon_revoke.sql` — idempotent revoke + verify + rollback. Kept
   SEPARATE from the invoice emergency lockdown per instruction.
 
 ## Changes applied this session (repo only; no live access)
 1. `frontend/next.config.js` — added security headers + poweredByHeader:false + PII no-store. (B, safe.)
-2. `supabase/migrations/0019_companies_anon_revoke.sql` — authored, NOT run. (G/B4.)
+2. `supabase/migrations/0020_companies_anon_revoke.sql` — authored, NOT run. (G/B4.)
 3. `supabase/migrations/RC1_diag_invoices_and_exposure.sql` — read-only diagnostics (prior step).
 Docs: RC1_STATIC_AUDIT.md, RC1_RISK_REGISTER.md, RC1_REGRESSION_PLAN.md, RC1_TEST_ACCOUNT_MATRIX.md, RC1_OBSERVABILITY_PLAN.md.
 
