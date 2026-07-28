@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { getDashboard } from "@/lib/api";
+import { getBrowserClient } from "@/lib/supabase/client";
 import type { NormalizedDashboard } from "@/lib/types";
 
 interface DashboardCtx {
@@ -28,13 +29,31 @@ export function DashboardProvider({
   const [loading, setLoading] = useState(!initialData && !initialError && autoFetch);
   const [error, setError] = useState<string | null>(initialError);
 
-  const load = useCallback(() => {
+  const load = useCallback(async () => {
     setLoading(true);
     setError(null);
-    getDashboard()
-      .then((d) => setData(d))
-      .catch((e) => setError(e?.message ?? "Failed to load dashboard data."))
-      .finally(() => setLoading(false));
+    try {
+      // Forward the browser session's access token; never fall back to an
+      // anonymous request.
+      const supabase = getBrowserClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) {
+        setData(null);
+        setError("Your session has expired. Please sign in again.");
+        return;
+      }
+      const d = await getDashboard(token);
+      setData(d);
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "Failed to load dashboard data."
+      );
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {

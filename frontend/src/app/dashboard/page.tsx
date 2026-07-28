@@ -180,7 +180,7 @@ export default function DashboardPage() {
                     </ul>
                   </>
                 ) : (
-                  <EmptyState title="Setup complete" description="No pending onboarding steps." />
+                  <EmptyState title="Setup status unavailable" description="Company onboarding isn't shown on this dashboard." />
                 )}
               </div>
             </Card>

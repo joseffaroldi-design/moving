@@ -62,8 +62,12 @@ async function callFunction<T>(
   return json as T;
 }
 
-export async function getDashboard(): Promise<NormalizedDashboard> {
-  const raw = await callFunction<unknown>("mvp-dashboard");
+// Requires the caller's authenticated Supabase access token. The token is
+// forwarded so every query in the Edge Function runs under the caller's RLS
+// context. There is NO anonymous fallback: without a token this rejects.
+export async function getDashboard(token: string): Promise<NormalizedDashboard> {
+  if (!token) throw new ApiError("You need to be signed in to load the dashboard.", 401);
+  const raw = await callFunction<unknown>("mvp-dashboard", { token });
   return normalizeDashboard(raw);
 }
 
