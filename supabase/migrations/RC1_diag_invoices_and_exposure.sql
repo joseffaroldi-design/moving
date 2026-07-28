@@ -15,14 +15,14 @@ where table_schema = 'public'
 order by table_name, ordinal_position;
 
 -- 2. Primary keys, foreign keys, unique + check constraints (invoice tables).
-select c.conrelid::regclass::text as table, c.conname,
+select c.conrelid::regclass::text as tbl, c.conname,
        case c.contype when 'p' then 'PK' when 'f' then 'FK'
             when 'u' then 'UNIQUE' when 'c' then 'CHECK' else c.contype::text end as kind,
        pg_get_constraintdef(c.oid) as definition
 from pg_constraint c
 where c.connamespace = 'public'::regnamespace
   and c.conrelid::regclass::text in ('invoices','invoice_line_items','invoice_payments')
-order by table, kind, conname;
+order by tbl, kind, conname;
 
 -- 3. FKs POINTING AT invoices (would block drop-and-recreate).
 select conrelid::regclass::text as referencing_table, conname, pg_get_constraintdef(oid) as def
@@ -45,14 +45,14 @@ where s.relkind = 'S'
   and a.attrelid::regclass::text in ('invoices','invoice_line_items','invoice_payments');
 
 -- 6. Triggers on invoice tables.
-select event_object_table as table, trigger_name, action_timing, event_manipulation, action_statement
+select event_object_table as tbl, trigger_name, action_timing, event_manipulation, action_statement
 from information_schema.triggers
 where event_object_schema = 'public'
   and event_object_table in ('invoices','invoice_line_items','invoice_payments')
-order by table, trigger_name;
+order by tbl, trigger_name;
 
 -- 7. RLS enabled + FORCE state for ALL public tables (find any missing FORCE).
-select c.relname as table, c.relrowsecurity as rls_enabled, c.relforcerowsecurity as rls_forced
+select c.relname as tbl, c.relrowsecurity as rls_enabled, c.relforcerowsecurity as rls_forced
 from pg_class c join pg_namespace n on n.oid = c.relnamespace and n.nspname = 'public'
 where c.relkind = 'r'
 order by c.relname;
@@ -98,7 +98,7 @@ where t.typname ilike '%invoice%'
 group by t.typname;
 
 -- 13. Approximate row counts (metadata only — NO row contents).
-select relname as table, n_live_tup as approx_rows
+select relname as tbl, n_live_tup as approx_rows
 from pg_stat_user_tables
 where schemaname = 'public'
   and relname in ('invoices','invoice_line_items','invoice_payments');
