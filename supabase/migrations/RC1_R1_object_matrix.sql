@@ -125,7 +125,7 @@ order by policy_table, polname, dep_type, depends_on;
 --     with each child's kind/owner/RLS + anon/authenticated direct SELECT.
 --     A child is directly addressable and must be locked individually in R3.
 -- ---------------------------------------------------------------------
-with rels(name) as (values
+with recursive rels(name) as (values
   ('app_navigation_items'),('app_settings'),('automation_rules'),('communications'),
   ('companies'),('company_onboarding_steps'),('crew_time_entries'),('crm_notes'),
   ('customer_deposits'),('damage_report_photos'),('damage_reports'),('dispatch_board_today'),
