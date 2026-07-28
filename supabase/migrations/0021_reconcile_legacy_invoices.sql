@@ -117,14 +117,29 @@ where con.contype = 'f'
                            'public.invoice_line_items'::regclass,
                            'public.payments'::regclass);
 
--- Exact view definitions (for rebuild with security_invoker=true later).
+-- ALL views/matviews that depend on invoices/payments (catalog-driven, not a
+-- hardcoded list). Captures definition + reloptions (security_invoker) so they
+-- can be rebuilt on rollback / in the later security_invoker=true migration.
 drop table if exists rc1_backup.b3_views;
 create table rc1_backup.b3_views as
-select c.relname as view_name, pg_get_viewdef(c.oid, true) as definition
-from pg_class c
-join pg_namespace n on n.oid = c.relnamespace and n.nspname = 'public'
-where c.relkind = 'v'
-  and c.relname in ('owner_dashboard_metrics','unpaid_invoice_queue');
+with dep_views as (
+  select distinct v.oid
+  from pg_depend d
+  join pg_rewrite rw on rw.oid = d.objid
+  join pg_class v on v.oid = rw.ev_class
+  join pg_class t on t.oid = d.refobjid
+  join pg_namespace nt on nt.oid = t.relnamespace and nt.nspname = 'public'
+  where d.classid = 'pg_rewrite'::regclass
+    and d.refclassid = 'pg_class'::regclass
+    and t.relname in ('invoices','payments')
+    and v.relkind in ('v','m')
+    and v.oid <> t.oid
+)
+select v.relname as view_name, v.relkind::text as kind, n.nspname as schema,
+       pg_get_viewdef(v.oid, true) as definition, v.reloptions as reloptions
+from dep_views dv
+join pg_class v on v.oid = dv.oid
+join pg_namespace n on n.oid = v.relnamespace;
 
 -- Exact legacy function definition + catalog-resolved identity args.
 drop table if exists rc1_backup.b3_routines;
@@ -137,10 +152,21 @@ join pg_namespace n on n.oid = p.pronamespace and n.nspname = 'public'
 where p.proname = 'recalculate_invoice_totals';
 
 -- ---------------------------------------------------------------------
--- 2. DROP dependent views (they reference invoices / payments).
+-- 2. DROP every dependent view/matview discovered above (CASCADE covers any
+--    view nested on top of them; all defs are snapshotted in b3_views).
 -- ---------------------------------------------------------------------
-drop view if exists public.owner_dashboard_metrics;
-drop view if exists public.unpaid_invoice_queue;
+do $$
+declare r record;
+begin
+  for r in select view_name, kind from rc1_backup.b3_views loop
+    if r.kind = 'm' then
+      execute format('drop materialized view if exists public.%I cascade', r.view_name);
+    else
+      execute format('drop view if exists public.%I cascade', r.view_name);
+    end if;
+    raise notice 'dropped dependent view public.%', r.view_name;
+  end loop;
+end $$;
 
 -- ---------------------------------------------------------------------
 -- 2.5 DROP external FK constraints (from surviving tables) that point at
