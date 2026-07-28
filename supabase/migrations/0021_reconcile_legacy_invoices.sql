@@ -166,14 +166,14 @@ commit;
 -- VERIFY (read-only; run after commit; paste results back).
 -- All rows in the first grid must show pass = true.
 -- =====================================================================
-select 'invoices_dropped'            as check, (to_regclass('public.invoices') is null)            as pass
+select 'invoices_dropped'            as check_name, (to_regclass('public.invoices') is null)            as pass
 union all select 'invoice_line_items_dropped', (to_regclass('public.invoice_line_items') is null)
 union all select 'payments_dropped',           (to_regclass('public.payments') is null)
 union all select 'invoice_status_enum_present',(exists (select 1 from pg_type where typname = 'invoice_status'))
 union all select 'legacy_recalc_fn_removed',   (not exists (
            select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace and n.nspname = 'public'
            where p.proname = 'recalculate_invoice_totals'))
-order by check;
+order by 1;
 
 -- Backup objects created (expect b3_columns, b3_constraints, b3_grants,
 -- b3_indexes, b3_manifest, b3_routines, b3_triggers, b3_views).
