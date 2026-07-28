@@ -31,7 +31,7 @@ select 'M1_TYPES' as block, jsonb_agg(x order by relname) as findings from (
     case c.relkind when 'r' then 't' when 'p' then 'part' when 'v' then 'view'
       when 'm' then 'mview' when 'f' then 'ftbl' else c.relkind::text end as ty,
     pg_get_userbyid(c.relowner) as own, ro.rolbypassrls as own_bypass,
-    c.relrowsecurity as rls, c.relforcerowsecurity as forced, c.relname
+    c.relrowsecurity as rls, c.relforcerowsecurity as forced
   from pg_class c join pg_namespace n on n.oid=c.relnamespace and n.nspname='public'
   join pg_roles ro on ro.oid=c.relowner
   where c.relname in (select name from rels)) x
@@ -76,8 +76,7 @@ select 'M7_FUNCS', jsonb_agg(x order by security_definer desc, proname) from (
     ro.rolbypassrls as owner_bypass,
     has_function_privilege('anon', p.oid,'EXECUTE') as anon_exec,
     has_function_privilege('authenticated', p.oid,'EXECUTE') as auth_exec,
-    (select string_agg(r.name, ',') from rels r where p.prosrc ~* ('\y'||r.name||'\y')) as refs,
-    p.prosecdef as security_definer, p.proname
+    (select string_agg(r.name, ',') from rels r where p.prosrc ~* ('\y'||r.name||'\y')) as refs
   from pg_proc p join pg_namespace n on n.oid=p.pronamespace and n.nspname='public'
   join pg_roles ro on ro.oid=p.proowner
   where exists (select 1 from rels r where p.prosrc ~* ('\y'||r.name||'\y'))) x
