@@ -21,9 +21,20 @@ Legacy invoice objects reconciled and new invoice schema/RPCs deployed and verif
   - draft_creator_security_definer: true
   - draft_creator_idempotent_lookup: true  (where job_id = p_job)
   - one_invoice_per_job_index: true  (partial unique index invoices_job_id_unique)
-- **Step E — Rebuild dependent views securely**: NOT STARTED (pending owner authorization).
-  Plan: new migration restoring `owner_dashboard_metrics`, `unpaid_invoice_queue`,
-  `job_profitability` from `rc1_backup.b3_views` snapshot, enforcing `security_invoker = true`.
+- **Step E — Rebuild dependent views securely**: PRE-FLIGHT DONE (owner-run, read-only). Rebuild pending owner authorization + 2 semantic decisions.
+  Pre-flight findings (rc1_backup.b3_views):
+  - All 3 views captured, defs readable, absent from public (as expected), no extras.
+  - job_profitability: CLEAN — references only i.total; RESTORE AS-IS + add security_invoker=true.
+  - owner_dashboard_metrics: STALE — references dropped public.payments (status/paid_at, payment_status enum)
+    and retired i.issue_date. REWRITE: payments -> invoice_payments (no status filter),
+    collected via sum(ip.amount) by ip.paid_at; invoiced date source = owner decision (created_at vs sent_at).
+    Also fix money fan-out via per-company scalar subqueries.
+  - unpaid_invoice_queue: STALE — i.balance_due -> i.balance (and WHERE), i.issue_date display -> owner decision
+    (created_at vs sent_at). Rest maps cleanly.
+  Open owner decisions before drafting the rebuild migration:
+    D1: owner_dashboard_metrics.invoiced_this_month date basis — created_at (draft) vs sent_at (issued).
+    D2: unpaid_invoice_queue issue_date column source — created_at vs sent_at (or expose both).
+    D3: money metrics correctness — scalar-subquery rewrite (recommended) vs faithful multi-join restore.
 
 ## Current status
 B3: SCHEMA + RPCs VERIFIED (Step D PASS). Not fully closed until Step E views are rebuilt with
