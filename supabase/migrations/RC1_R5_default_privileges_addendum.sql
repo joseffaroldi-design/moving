@@ -1,92 +1,55 @@
 -- =====================================================================
--- RC1_R5_default_privileges_addendum.sql   [CONDITIONAL — only if M4 shows rows]
--- Southern Magnolia Movers — RC1.  SEPARATE from RC1_R3. EXECUTE NOTHING here.
+-- RC1_R5_default_privileges_addendum.sql   (RUN AFTER R3 is verified)
 --
--- WHY: If M4 (RC1_R1) shows ALTER DEFAULT PRIVILEGES granting to anon /
--- authenticated / PUBLIC, then every NEW object created by that grantor
--- re-opens the exposure — so RC1_R3 alone is not durable. Default privileges
--- are scoped PER GRANTOR (role that creates the object) + schema + object type;
--- revoking one grantor's defaults does NOT touch another grantor's. This file
--- therefore GENERATES the precise statements from the live catalog rather than
--- assuming a single grantor.
+-- ROOT-CAUSE FIX for B2. R1/M4 revealed that schema `public` carries
+-- DEFAULT PRIVILEGES (from roles postgres AND supabase_admin) that
+-- auto-grant anon + authenticated FULL DML on every FUTURE table, plus
+-- EXECUTE on future functions and USAGE on future sequences. That is why
+-- new tables (e.g. the upcoming Phase 8 invoice tables) would silently
+-- re-expose themselves to anon.
 --
--- THIS FILE DOES NOT EXECUTE ANY CHANGE. It contains:
---   PART A — read-only GENERATOR that prints exact REVOKE statements (review these).
---   PART B — read-only SNAPSHOT capture (run before applying A's output).
---   PART C — read-only ROLLBACK GENERATOR that prints exact restore statements.
--- You paste/run the generated statements yourself, only after review + approval.
+-- This script stops that for FUTURE objects only. It does NOT touch any
+-- existing object, so it CANNOT break the currently-running app. After
+-- this, every new public object starts with NO anon/authenticated access;
+-- each migration must GRANT explicitly (this project already does that
+-- per phase — SELECT for staff + EXECUTE per RPC).
+--
+-- Scope is strictly schema `public`. The storage / graphql / graphql_public
+-- defaults seen in M4 are Supabase-managed and are intentionally left alone.
 -- =====================================================================
+begin;
 
--- ---------------------------------------------------------------------
--- PART A — GENERATOR: exact "revoke default privileges" statements, per
---          grantor/schema/object-type, for grantees anon/authenticated/PUBLIC.
---          Output is TEXT to review; running THIS select changes nothing.
--- ---------------------------------------------------------------------
-select 'A_GENERATED_REVOKE' as block,
-       format(
-         'ALTER DEFAULT PRIVILEGES FOR ROLE %I%s REVOKE ALL ON %s FROM %s;',
-         pg_get_userbyid(d.defaclrole),
-         case when d.defaclnamespace is null or d.defaclnamespace = 0
-              then '' else ' IN SCHEMA ' || quote_ident(n.nspname) end,
-         case d.defaclobjtype when 'r' then 'TABLES' when 'S' then 'SEQUENCES'
-              when 'f' then 'FUNCTIONS' when 'T' then 'TYPES' when 'n' then 'SCHEMAS'
-              else d.defaclobjtype::text end,
-         case when a.grantee = 0 then 'PUBLIC' else quote_ident(a.grantee::regrole::text) end
-       ) as statement_to_run
+-- Part A — FOR ROLE postgres (the SQL editor runs as postgres; always allowed).
+alter default privileges for role postgres in schema public revoke all on tables from anon, authenticated;
+alter default privileges for role postgres in schema public revoke all on sequences from anon, authenticated;
+alter default privileges for role postgres in schema public revoke all on functions from anon, authenticated;
+
+commit;
+
+-- Part B — FOR ROLE supabase_admin (attempted; needs membership in supabase_admin).
+-- Wrapped so a permission error here does NOT abort Part A. If it prints the
+-- SKIPPED notice, copy it back and we will handle supabase_admin defaults
+-- through the Supabase dashboard / support path.
+do $$
+begin
+  execute 'alter default privileges for role supabase_admin in schema public revoke all on tables from anon, authenticated';
+  execute 'alter default privileges for role supabase_admin in schema public revoke all on sequences from anon, authenticated';
+  execute 'alter default privileges for role supabase_admin in schema public revoke all on functions from anon, authenticated';
+  raise notice 'R5 Part B OK: supabase_admin public-schema default privileges revoked for anon/authenticated';
+exception when insufficient_privilege then
+  raise notice 'R5 Part B SKIPPED (insufficient privilege to alter supabase_admin defaults) — report this line back to the agent';
+end$$;
+
+-- VERIFY (paste back): expect NO rows granting anon/authenticated as a public-schema
+-- default from postgres. If Part B was skipped, supabase_admin rows may remain.
+select pg_get_userbyid(d.defaclrole) as grantor,
+       coalesce(n.nspname,'(all)') as schema,
+       d.defaclobjtype::text as objtype,
+       case when a.grantee = 0 then 'PUBLIC' else a.grantee::regrole::text end as grantee,
+       a.privilege_type
 from pg_default_acl d
 left join pg_namespace n on n.oid = d.defaclnamespace
 cross join lateral aclexplode(d.defaclacl) a
-where (a.grantee = 0 or a.grantee::regrole::text in ('anon','authenticated'))
-group by d.defaclrole, d.defaclnamespace, n.nspname, d.defaclobjtype, a.grantee
-order by 2;
--- If this returns ZERO rows, NO default-privilege remediation is needed (skip B/C).
-
--- ---------------------------------------------------------------------
--- PART B — SNAPSHOT the exact pre-change default ACLs so C can restore them.
---          (This is the ONLY statement here that writes — a backup table.
---           Run it ONLY when you are ready to apply Part A's output.)
--- ---------------------------------------------------------------------
--- begin;
--- create schema if not exists rc1_backup;
--- drop table if exists rc1_backup.default_acl_snapshot;
--- create table rc1_backup.default_acl_snapshot as
--- select d.defaclrole,
---        pg_get_userbyid(d.defaclrole)        as grantor,
---        d.defaclnamespace,
---        n.nspname                            as schema,
---        d.defaclobjtype,
---        case when a.grantee = 0 then 'PUBLIC' else a.grantee::regrole::text end as grantee,
---        a.privilege_type,
---        a.is_grantable
--- from pg_default_acl d
--- left join pg_namespace n on n.oid = d.defaclnamespace
--- cross join lateral aclexplode(d.defaclacl) a;
--- commit;
-
--- ---------------------------------------------------------------------
--- PART C — ROLLBACK GENERATOR: prints exact GRANT statements to restore the
---          captured default privileges (run against rc1_backup.default_acl_snapshot
---          AFTER Part B was captured). Prints text only — changes nothing.
---          ⚠️ Restoring re-adds anon/authenticated defaults (reopens the drift).
--- ---------------------------------------------------------------------
--- select 'C_GENERATED_RESTORE' as block,
---        format(
---          'ALTER DEFAULT PRIVILEGES FOR ROLE %I%s GRANT %s ON %s TO %s%s;',
---          s.grantor,
---          case when s.schema is null then '' else ' IN SCHEMA ' || quote_ident(s.schema) end,
---          s.privilege_type,
---          case s.defaclobjtype when 'r' then 'TABLES' when 'S' then 'SEQUENCES'
---               when 'f' then 'FUNCTIONS' when 'T' then 'TYPES' when 'n' then 'SCHEMAS'
---               else s.defaclobjtype::text end,
---          case when s.grantee = 'PUBLIC' then 'PUBLIC' else quote_ident(s.grantee) end,
---          case when s.is_grantable then ' WITH GRANT OPTION' else '' end
---        ) as statement_to_run
--- from rc1_backup.default_acl_snapshot s
--- where s.grantee in ('anon','authenticated','PUBLIC')
--- order by s.grantor, s.schema, s.defaclobjtype, s.grantee, s.privilege_type;
-
--- ---------------------------------------------------------------------
--- DRIFT NOTE: before restoring, compare rc1_backup.default_acl_snapshot to the
--- CURRENT pg_default_acl; if they differ, someone changed defaults after the
--- snapshot — investigate before running C so you don't clobber newer intent.
--- ---------------------------------------------------------------------
+where coalesce(n.nspname,'') = 'public'
+  and a.grantee::regrole::text in ('anon','authenticated')
+order by grantor, objtype, grantee, privilege_type;
