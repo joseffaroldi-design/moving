@@ -100,6 +100,23 @@ from information_schema.role_table_grants
 where table_schema = 'public'
   and table_name in ('invoices','invoice_line_items','payments');
 
+-- External FK constraints that reference the tables we will drop (invoices /
+-- payments) FROM surviving tables (e.g. customer_deposits.payment_id ->
+-- payments). Snapshotted so they can be recreated on rollback; dropped
+-- explicitly in step 2.5 so the table drops never need a blanket CASCADE.
+drop table if exists rc1_backup.b3_ext_fks;
+create table rc1_backup.b3_ext_fks as
+select con.conname,
+       con.conrelid::regclass::text  as on_table,
+       con.confrelid::regclass::text as references_table,
+       pg_get_constraintdef(con.oid)  as definition
+from pg_constraint con
+where con.contype = 'f'
+  and con.confrelid in ('public.invoices'::regclass, 'public.payments'::regclass)
+  and con.conrelid not in ('public.invoices'::regclass,
+                           'public.invoice_line_items'::regclass,
+                           'public.payments'::regclass);
+
 -- Exact view definitions (for rebuild with security_invoker=true later).
 drop table if exists rc1_backup.b3_views;
 create table rc1_backup.b3_views as
@@ -124,6 +141,20 @@ where p.proname = 'recalculate_invoice_totals';
 -- ---------------------------------------------------------------------
 drop view if exists public.owner_dashboard_metrics;
 drop view if exists public.unpaid_invoice_queue;
+
+-- ---------------------------------------------------------------------
+-- 2.5 DROP external FK constraints (from surviving tables) that point at
+--     invoices/payments — snapshotted above. Targeted (no blanket CASCADE).
+--     Handles customer_deposits.payment_id_fkey and any others discovered.
+-- ---------------------------------------------------------------------
+do $$
+declare r record;
+begin
+  for r in select conname, on_table from rc1_backup.b3_ext_fks loop
+    execute format('alter table %s drop constraint if exists %I', r.on_table, r.conname);
+    raise notice 'dropped external FK % on %', r.conname, r.on_table;
+  end loop;
+end $$;
 
 -- ---------------------------------------------------------------------
 -- 3. DROP legacy tables in dependency-safe order.
