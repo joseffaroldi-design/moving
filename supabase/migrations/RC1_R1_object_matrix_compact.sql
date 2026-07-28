@@ -119,11 +119,11 @@ union all
 -- M13: sequences on the 42 where anon or authenticated has USAGE/SELECT.
 select 'M13_SEQ_EXPOSED', jsonb_agg(x) from (
   select s.relname as sequence, t.relname as owned_by,
-    has_table_privilege('anon',s.oid,'USAGE') as anon_usage,
-    has_table_privilege('authenticated',s.oid,'USAGE') as auth_usage
+    has_sequence_privilege('anon',s.oid,'USAGE') as anon_usage,
+    has_sequence_privilege('authenticated',s.oid,'USAGE') as auth_usage
   from pg_class s join pg_depend d on d.objid=s.oid and d.deptype='a'
   join pg_class t on t.oid=d.refobjid
   join pg_namespace n on n.oid=s.relnamespace and n.nspname='public'
   where s.relkind='S' and t.relname in (select name from rels)
-    and (has_table_privilege('anon',s.oid,'USAGE') or has_table_privilege('anon',s.oid,'SELECT')
-         or has_table_privilege('authenticated',s.oid,'USAGE'))) x;
+    and (has_sequence_privilege('anon',s.oid,'USAGE') or has_sequence_privilege('anon',s.oid,'SELECT')
+         or has_sequence_privilege('authenticated',s.oid,'USAGE'))) x;
