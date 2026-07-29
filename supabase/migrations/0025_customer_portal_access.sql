@@ -65,6 +65,14 @@ where table_schema='public' and (
    or (table_name='activity_log'       and column_name in ('company_id','actor_id','actor_email','actor_role','action','entity_type','entity_id','summary','metadata')) )
 group by table_name order by table_name;
 
+-- A2b. Token fields used by portal_approve_quote step (iii) must exist on
+--      quote_approval_tokens (expect one row listing all four).
+select table_name, string_agg(column_name, ', ' order by ordinal_position) as cols
+from information_schema.columns
+where table_schema='public' and table_name='quote_approval_tokens'
+  and column_name in ('quote_id','revoked_at','decided_at','expires_at')
+group by table_name;
+
 -- A3. CAPTURE + SAVE the exact prior definitions of anything that shares a name
 --     we use. If any UNEXPECTED object appears here (i.e. a portal_* /
 --     _portal_* function OR a *_customer_self_*/*portal* policy already exists),
@@ -136,10 +144,54 @@ select conrelid::regclass as table, conname, pg_get_constraintdef(oid) as def
 from pg_constraint
 where pg_get_constraintdef(oid) ~* '\mcurrent_customer_id\M';
 
--- A4. The role enum must contain 'customer' (this migration depends on it).
-select exists (
-  select 1 from pg_enum e join pg_type t on t.oid=e.enumtypid
-  where t.typname='user_role' and e.enumlabel='customer') as customer_role_exists;
+-- A3d. EXISTING quote-acceptance surface — exact signatures + owners. Part B
+--      does NOT create or modify any of these; portal_approve_quote only mirrors
+--      their invariants. Confirm they exist unchanged (and note their sigs).
+select p.proname,
+       pg_get_function_identity_arguments(p.oid) as signature,
+       pg_get_userbyid(p.proowner) as owner,
+       p.prosecdef as security_definer
+from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+where n.nspname='public'
+  and p.proname in ('respond_to_quote_approval','get_quote_by_approval_token',
+                    'create_quote_approval_link','revoke_quote_approval_links',
+                    '_require_quote_approval_token','_require_quote_mutator')
+order by p.proname;
+
+-- A3e. activity_log dependency (created by 0024) — must exist, company_id NOT
+--      NULL, RLS enabled, authenticated=SELECT only, no anon/PUBLIC, no client
+--      write grants. portal_approve_quote's audit insert depends on this.
+select
+  to_regclass('public.activity_log') is not null as table_exists,
+  (select is_nullable from information_schema.columns
+     where table_schema='public' and table_name='activity_log' and column_name='company_id') as company_id_nullable,
+  (select relrowsecurity from pg_class where oid='public.activity_log'::regclass) as rls_enabled;
+select grantee, privilege_type
+from information_schema.role_table_grants
+where table_schema='public' and table_name='activity_log'
+  and grantee in ('anon','authenticated','public','PUBLIC')
+order by grantee, privilege_type;
+
+-- A3f. CREATE/REPLACE MANIFEST — the 9 function identities Part B will create.
+--      Expect ALL to be ABSENT now (0 rows). Any row here = a pre-existing
+--      object Part B would replace -> STOP and reconcile (also cross-check A3).
+select p.proname, pg_get_function_identity_arguments(p.oid) as signature
+from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+where n.nspname='public'
+  and p.proname in ('_portal_current_customer_id','portal_list_quotes','portal_get_quote',
+                    'portal_list_jobs','portal_get_job','portal_list_invoices',
+                    'portal_get_invoice','portal_approve_quote','portal_update_contact')
+order by p.proname;
+
+-- A4. Enum labels Part B casts to must exist (expect every column true).
+select
+  exists(select 1 from pg_enum e join pg_type t on t.oid=e.enumtypid where t.typname='user_role'     and e.enumlabel='customer')  as user_role_customer,
+  exists(select 1 from pg_enum e join pg_type t on t.oid=e.enumtypid where t.typname='quote_status'   and e.enumlabel='draft')     as qs_draft,
+  exists(select 1 from pg_enum e join pg_type t on t.oid=e.enumtypid where t.typname='quote_status'   and e.enumlabel='sent')      as qs_sent,
+  exists(select 1 from pg_enum e join pg_type t on t.oid=e.enumtypid where t.typname='quote_status'   and e.enumlabel='viewed')    as qs_viewed,
+  exists(select 1 from pg_enum e join pg_type t on t.oid=e.enumtypid where t.typname='quote_status'   and e.enumlabel='accepted')  as qs_accepted,
+  exists(select 1 from pg_enum e join pg_type t on t.oid=e.enumtypid where t.typname='quote_status'   and e.enumlabel='expired')   as qs_expired,
+  exists(select 1 from pg_enum e join pg_type t on t.oid=e.enumtypid where t.typname='invoice_status' and e.enumlabel='draft')     as inv_draft;
 
 -- A5. Snapshot the EXISTING staff policies on the 7 target tables. Save this;
 --     Part C6 must return an identical set (proves staff RLS was untouched).
@@ -805,7 +857,7 @@ end $$;
 
 
 -- =====================================================================
--- PART E — ROLLBACK (removes ONLY objects created by 0024)
+-- PART E — ROLLBACK (removes ONLY objects created by 0025)
 -- =====================================================================
 -- Drops the 9 functions + the unique index. Optionally drops the column
 -- (ONLY if you are certain no links exist / no data depends on it). Because
