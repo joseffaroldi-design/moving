@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Search, MapPin, Users, Truck, FileText } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Search, MapPin, Users, Truck, FileText, Receipt } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { PageHeader } from "@/components/ui/page-header";
 import { DataTable, Thead, Th, Tbody, Tr, Td } from "@/components/ui/table";
@@ -25,6 +26,7 @@ import {
   canSetJobStatus,
   type JobRecord,
 } from "@/lib/jobs";
+import { canMutateInvoice, generateInvoiceForJob, fetchInvoiceIdForJob } from "@/lib/invoices";
 
 const TIMELINE = ["scheduled", "confirmed", "in_progress", "completed"];
 
@@ -38,6 +40,8 @@ export default function JobsPage() {
   const { me, role } = useAuth();
   const companyId = (me?.profile as { company_id?: string } | null)?.company_id ?? null;
   const canManageStatus = canSetJobStatus(role);
+  const canInvoice = canMutateInvoice(role);
+  const router = useRouter();
   const toast = useToast();
 
   const [jobs, setJobs] = useState<JobRecord[]>([]);
@@ -48,6 +52,9 @@ export default function JobsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [statusBusy, setStatusBusy] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [jobInvoiceId, setJobInvoiceId] = useState<string | null>(null);
+  const [invoiceChecking, setInvoiceChecking] = useState(false);
+  const [generatingInvoice, setGeneratingInvoice] = useState(false);
   const busyRef = useRef(false);
 
   const load = useCallback(async () => {
@@ -115,6 +122,34 @@ export default function JobsPage() {
     },
     [selectedId, load, toast]
   );
+
+  // When a completed job is opened, check whether it already has an invoice.
+  useEffect(() => {
+    let active = true;
+    setJobInvoiceId(null);
+    if (selected && selected.status === "completed") {
+      setInvoiceChecking(true);
+      fetchInvoiceIdForJob(selected.id)
+        .then((invId) => { if (active) setJobInvoiceId(invId); })
+        .catch(() => { /* non-fatal; treat as no invoice */ })
+        .finally(() => { if (active) setInvoiceChecking(false); });
+    }
+    return () => { active = false; };
+  }, [selectedId, selected]);
+
+  const generateInvoice = useCallback(async () => {
+    if (!selected || generatingInvoice) return;
+    setGeneratingInvoice(true);
+    try {
+      const res = await generateInvoiceForJob(selected.id);
+      toast(res.created ? "Draft invoice created." : "Invoice already exists — opening it.", "success");
+      router.push(`/dashboard/invoices/${res.invoice_id}`);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Could not generate the invoice.", "error");
+    } finally {
+      setGeneratingInvoice(false);
+    }
+  }, [selected, generatingInvoice, router, toast]);
 
   return (
     <div>
@@ -319,6 +354,38 @@ export default function JobsPage() {
               <Info label="Created" value={formatDate(selected.created_at)} />
               <Info label="Updated" value={formatDate(selected.updated_at)} />
             </div>
+
+            {selected.status === "completed" && (
+              <div data-testid="job-invoice-section">
+                <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Invoice</h4>
+                {invoiceChecking ? (
+                  <p className="text-sm text-slate-500">Checking for an existing invoice…</p>
+                ) : jobInvoiceId ? (
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => router.push(`/dashboard/invoices/${jobInvoiceId}`)}
+                    data-testid="job-view-invoice"
+                  >
+                    <Receipt className="h-4 w-4" /> View invoice
+                  </Button>
+                ) : canInvoice ? (
+                  <Button
+                    variant="gold"
+                    className="w-full"
+                    loading={generatingInvoice}
+                    onClick={generateInvoice}
+                    data-testid="job-generate-invoice"
+                  >
+                    <Receipt className="h-4 w-4" /> Generate invoice
+                  </Button>
+                ) : (
+                  <p className="text-sm text-slate-500">
+                    No invoice yet. Invoice creation requires an owner, operations manager, or sales role.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         )}
       </Drawer>

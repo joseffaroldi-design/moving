@@ -27,7 +27,7 @@ export const STAFF_NAV: NavItem[] = [
   { label: "Quotes", href: "/dashboard/quotes", icon: FileText, roles: ["owner","operations_manager","manager","sales"] },
   { label: "Jobs", href: "/dashboard/jobs", icon: Briefcase, roles: ["owner","operations_manager","manager","dispatcher"] },
   { label: "Dispatch", href: "/dashboard/dispatch", icon: CalendarClock, roles: ["owner","operations_manager","manager","dispatcher"] },
-  { label: "Invoices", href: "/dashboard/invoices", icon: Receipt, roles: ["owner","operations_manager","manager"] },
+  { label: "Invoices", href: "/dashboard/invoices", icon: Receipt, roles: ["owner","operations_manager","manager","sales","dispatcher"] },
   { label: "Reports", href: "/dashboard/reports", icon: BarChart3, roles: ["owner","operations_manager","manager"] },
   { label: "Settings", href: "/dashboard/settings", icon: Settings, roles: ["owner","operations_manager","manager"] },
 ];

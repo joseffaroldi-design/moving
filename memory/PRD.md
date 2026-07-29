@@ -483,3 +483,25 @@ authorization to proceed to feature work.
 Optional follow-ups: B2 supabase_admin residual via Supabase support (RC1_supabase_support_request.md);
 SSR prod-deploy platform limitation (needs Node-server-capable deploy image).
 RC1 migration files: /app/supabase/migrations/ (RC1_R2/R3/R5, 0018–0023, verify_002x).
+## Phase 8 — Invoices & Payments UI (2026-06, IN REVIEW — owner-unlocked, preview only)
+- Built on the verified DB (0018 schema/RPCs, 0021, 0022 secure views, 0023 service_role-only views).
+  NO schema/migration/Edge Function/RLS/grant changes. Production approval remains NO.
+- Reads: authenticated RLS-scoped SELECT on invoices/invoice_line_items/invoice_payments.
+  Writes: SECURITY DEFINER RPCs only (generate_invoice_for_job, update_draft_invoice_with_items,
+  mark_invoice_sent, record_invoice_payment, void_invoice); mutator roles owner/operations_manager/sales.
+- Features: invoice list (status incl. derived Overdue, customer, job, issued=sent_at, due, total,
+  balance) + filters; detail route /dashboard/invoices/[id] (summary, line items, payment history,
+  actions); create-from-completed-job (invoices page dialog + Job-detail Generate/View, idempotent);
+  draft editor (line items/tax/notes/due + preview); mark-sent; record manual payment (partial+balance,
+  over-balance/zero/neg/nonnumeric blocked client-side, DB authoritative); void; branded printable
+  invoice /print/invoice/[id]; dashboard UnpaidInvoicesCard (reads invoices table, NOT service-role views).
+- Payments = manual recorded only (no processor).
+- Files: NEW src/lib/invoices.ts, src/app/dashboard/invoices/[id]/page.tsx,
+  src/components/invoices/{InvoiceEditorDrawer,RecordPaymentDialog,NewInvoiceFromJobDialog,UnpaidInvoicesCard}.tsx,
+  src/app/print/invoice/[id]/page.tsx, src/components/print/InvoiceDocument.tsx.
+  MODIFIED src/app/dashboard/invoices/page.tsx, src/lib/status.ts, src/app/dashboard/page.tsx,
+  src/lib/nav.ts (Invoices nav += sales, dispatcher), src/app/dashboard/jobs/page.tsx.
+- Verification: tsc PASS; yarn build PASS (28 routes); /dashboard/invoices -> 307 unauth.
+  ⚠️ Authenticated multi-role/cross-company flows NOT auto-tested (no stored credentials, owner policy).
+  Owner-executed runbook: /app/supabase/PHASE8_owner_test_runbook.md. Status doc: /app/memory/PHASE8_status.md.
+- NOT complete until owner returns Checkpoint 4 evidence.

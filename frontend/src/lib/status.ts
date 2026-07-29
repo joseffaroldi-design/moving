@@ -3,7 +3,7 @@
 export type BadgeTone = "neutral" | "info" | "success" | "danger" | "warning";
 
 const SUCCESS = ["won", "approved", "accepted", "completed", "paid", "active", "confirmed", "signed", "clocked_in"];
-const INFO = ["in_progress", "contacted", "qualified", "sent", "scheduled", "assigned", "dispatched", "quoted", "reviewed", "en_route", "partial"];
+const INFO = ["in_progress", "contacted", "qualified", "sent", "scheduled", "assigned", "dispatched", "quoted", "reviewed", "en_route", "partial", "partially_paid"];
 const DANGER = ["lost", "expired", "overdue", "cancelled", "canceled", "rejected", "failed", "declined", "void"];
 const WARNING = ["pending", "draft", "unassigned", "on_hold", "hold", "unpaid", "awaiting"];
 

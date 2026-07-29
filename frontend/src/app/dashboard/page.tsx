@@ -25,6 +25,7 @@ import { formatCurrency, formatDate, titleCase } from "@/lib/format";
 import { leadName, quoteCustomer, jobCustomer, addr } from "@/lib/entities";
 import { BRAND } from "@/lib/brand";
 import { CrescentMark } from "@/components/brand/Logo";
+import { UnpaidInvoicesCard } from "@/components/invoices/UnpaidInvoicesCard";
 
 export default function DashboardPage() {
   const { data, loading, error, refetch } = useDashboardData();
@@ -84,6 +85,8 @@ export default function DashboardPage() {
               </>
             )}
           </div>
+
+          <UnpaidInvoicesCard />
 
           <div className="grid gap-6 lg:grid-cols-3">
             {/* Recent leads */}
