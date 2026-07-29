@@ -89,7 +89,7 @@ select p.proname,
        p.proconfig as config,
        pg_get_functiondef(p.oid) as definition
 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
-where n.nspname='public'
+where n.nspname='public' and p.prokind in ('f','p')
   and p.proname in ('current_customer_id','_portal_current_customer_id',
                     'portal_list_quotes','portal_get_quote','portal_list_jobs',
                     'portal_get_job','portal_list_invoices','portal_get_invoice',
@@ -139,7 +139,7 @@ where refobjid = (
 --   c2) other function/procedure bodies referencing it by name:
 select p.proname, n.nspname
 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
-where p.proname <> 'current_customer_id'
+where p.proname <> 'current_customer_id' and p.prokind in ('f','p')
   and pg_get_functiondef(p.oid) ~* '\mcurrent_customer_id\M';
 --   c3) RLS policies referencing it (USING or WITH CHECK):
 select schemaname, tablename, policyname, cmd
