@@ -31,10 +31,22 @@ Legacy invoice objects reconciled and new invoice schema/RPCs deployed and verif
     Also fix money fan-out via per-company scalar subqueries.
   - unpaid_invoice_queue: STALE — i.balance_due -> i.balance (and WHERE), i.issue_date display -> owner decision
     (created_at vs sent_at). Rest maps cleanly.
-  Open owner decisions before drafting the rebuild migration:
-    D1: owner_dashboard_metrics.invoiced_this_month date basis — created_at (draft) vs sent_at (issued).
-    D2: unpaid_invoice_queue issue_date column source — created_at vs sent_at (or expose both).
-    D3: money metrics correctness — scalar-subquery rewrite (recommended) vs faithful multi-join restore.
+  Owner decisions taken: D1=sent_at, D2=sent_at AS issue_date, D3=scalar-subquery (non-fan-out).
+
+- **0022_rebuild_b3_views.sql**: DRAFTED + EXECUTED by owner. verify_0022 run (Grids A-G).
+  Verification result = PARTIAL:
+   - Grid A PASS: all 3 ordinary views, security_invoker=true, owner=postgres.
+   - Grid B PASS: no legacy payments/issue_date-source/balance_due/quote_line_item_id/i.paid_at;
+                  unpaid exposes sent_at AS issue_date.
+   - Grid C PASS: only authenticated(SELECT)/postgres/service_role. NO anon/PUBLIC.
+   - Grid E PASS: dependency lists exactly as intended.
+   - Grid F PASS: view metrics == independent recompute (fan-out inflation ruled out).
+   - Grid D GAP: authenticated lacks SELECT on companies + payroll_entries -> owner_dashboard_metrics
+                 and job_profitability error for direct authenticated sessions.
+  Assessment: likely NON-BREAKING today (dashboard reads via secured Edge Function/service_role;
+  direct authenticated reads of these views are Phase 8, LOCKED). payroll_entries is sensitive -
+  do NOT grant authenticated SELECT without confirming its RLS is company- AND role-scoped.
+  Open decision: (a) leave as-is, (b) grant after RLS-posture diagnostic, (c) other.
 
 ## Current status
 B3: SCHEMA + RPCs VERIFIED (Step D PASS). Not fully closed until Step E views are rebuilt with
