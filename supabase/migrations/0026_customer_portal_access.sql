@@ -498,6 +498,10 @@ grant execute on function public.portal_list_invoices(integer, integer) to authe
 -- ---------------------------------------------------------------------
 -- B8. READ RPC — one owned, non-draft invoice + line items + payments.
 --     Explicit fields (NO created_by, NO recorded_by, NO company_id).
+--     NOTE: invoices.notes and invoice_payments.note are OMITTED — both are
+--     staff-authored freeform fields (set via InvoiceEditorDrawer / RecordPayment
+--     Dialog) not proven exclusively customer-facing; default-omit to avoid
+--     leaking internal remarks. Re-add later only if proven customer-facing.
 -- ---------------------------------------------------------------------
 create or replace function public.portal_get_invoice(p_invoice_id uuid)
 returns json
@@ -515,7 +519,7 @@ begin
   if v_cust is null then raise exception 'Not authorized as a customer'; end if;
 
   select id, invoice_number, status, subtotal, tax_rate, tax, total,
-         amount_paid, balance, notes, due_date, sent_at
+         amount_paid, balance, due_date, sent_at
     into i
   from public.invoices
   where id = p_invoice_id and customer_id = v_cust and status::text <> 'draft';
@@ -531,7 +535,7 @@ begin
   where li.invoice_id = i.id;
 
   select coalesce(json_agg(json_build_object(
-           'amount', p.amount, 'method', p.method, 'paid_at', p.paid_at, 'note', p.note)
+           'amount', p.amount, 'method', p.method, 'paid_at', p.paid_at)
            order by p.paid_at desc), '[]'::json)
     into v_pays
   from public.invoice_payments p
@@ -540,7 +544,7 @@ begin
   return json_build_object(
     'id', i.id, 'invoice_number', i.invoice_number, 'status', i.status::text,
     'subtotal', i.subtotal, 'tax_rate', i.tax_rate, 'tax', i.tax, 'total', i.total,
-    'amount_paid', i.amount_paid, 'balance', i.balance, 'notes', i.notes,
+    'amount_paid', i.amount_paid, 'balance', i.balance,
     'due_date', i.due_date, 'sent_at', i.sent_at,
     'line_items', v_items, 'payments', v_pays
   );
@@ -554,29 +558,31 @@ grant execute on function public.portal_get_invoice(uuid) to authenticated;
 -- B9. WRITE RPC — customer approves ONE of their own quotes.
 --     Reproduces the authoritative 0015 respond_to_quote_approval invariants
 --     for an 'accept' decision, atomically:
---       (i)   expiry guard: an expired-by-date quote auto-flips to 'expired'
---             and CANNOT be accepted (mirrors 0015).
---       (ii)  status-guarded atomic UPDATE ... RETURNING: succeeds for exactly
---             one quote whose status is 'sent' or 'viewed'.
---       (iii) revoke all outstanding active approval tokens for the quote
---             (mirrors 0015's "revoke the other tokens" cleanup).
---     NOTE: quotes has no triggers and the activity log is not trigger-driven
---     (verified against 0003/0014/0015), so (i)-(iii) are the complete set of
---     acceptance side-effects. The row is locked FOR UPDATE to serialise
---     against a concurrent token-path decision.
+--       (i)   awaiting-decision guard: status must be 'sent' or 'viewed'.
+--       (ii)  expiry: an expired-by-date quote is atomically flipped to
+--             'expired' and the function RETURNS a structured, NON-RAISING
+--             result {status:'expired', approved:false} — so the flip PERSISTS
+--             and commits (it is NOT rolled back). This is an INTENTIONAL
+--             DIFFERENCE from 0015: respond_to_quote_approval flips to 'expired'
+--             then RAISEs, which rolls its own flip back (expiry there is
+--             effectively display/validation-only). The portal is a logged-in
+--             interactive surface, so persisting true state is correct here.
+--             0015 is NOT modified (out of scope; no DDL to the token path).
+--       (iii) status-guarded atomic UPDATE ... RETURNING: accepts exactly one
+--             'sent'/'viewed' quote; returns {status:'accepted', approved:true}.
+--       (iv)  revoke all outstanding active approval tokens (mirrors 0015 cleanup).
+--     The row is locked FOR UPDATE to serialise against a concurrent token-path
+--     decision. quotes has no triggers and the audit log is not trigger-driven
+--     (verified vs 0003/0014/0015).
 --
---     AUDIT (ATOMIC / FAIL-CLOSED per owner decision): step (iv) writes ONE
---     activity_log row in THIS SAME transaction, with NO exception handler.
---     Acceptance (ii), token revocation (iii), and the audit insert (iv) are
---     therefore atomic: either all three commit, or ANY failure rolls the whole
---     operation back. Every identity/tenant field is derived server-side from
---     the VERIFIED active profile and the Auth user — actor_id = auth.uid();
---     actor_role + company_id from the caller's own active public.profiles row
---     (not hardcoded); actor_email from auth.users (the authenticated Auth-user
---     email, NOT the customer-editable customers.email). No client-supplied
---     actor/customer/company identity is trusted. Depends on
---     0024_activity_log_hardened.sql (must be applied first). Customers cannot
---     READ activity_log (company-scoped, staff-only read policy).
+--     AUDIT (ATOMIC / FAIL-CLOSED per owner decision): on ACCEPT only, one
+--     activity_log row is written in THIS SAME transaction with NO exception
+--     handler — accept + token revoke + audit all commit together or all roll
+--     back. Identity is server-derived: actor_id = auth.uid(); actor_role +
+--     company_id from the caller's own active public.profiles row (not
+--     hardcoded); actor_email from auth.users (NOT the editable customers.email).
+--     No client-supplied actor/customer/company identity is trusted. Depends on
+--     0024_activity_log_hardened.sql. Customers cannot READ activity_log.
 -- ---------------------------------------------------------------------
 create or replace function public.portal_approve_quote(p_quote_id uuid)
 returns json
@@ -604,16 +610,22 @@ begin
 
   if not found then raise exception 'Quote not found'; end if;
 
-  -- (i) expiry guard — mirrors 0015
+  -- (i) awaiting-decision guard
+  if v_status not in ('sent','viewed') then
+    raise exception 'This quote is not awaiting a decision (current status: %)', v_status;
+  end if;
+
+  -- (ii) expiry: flip to expired and RETURN (no raise -> the flip PERSISTS and
+  --      commits). Intentional difference from 0015 (which raises + rolls back).
   if v_expires is not null and v_expires <= now() then
     update public.quotes
        set status = 'expired'::public.quote_status, updated_at = now()
      where id = p_quote_id and customer_id = v_cust
        and status::text in ('sent','viewed');
-    raise exception 'This quote has expired';
+    return json_build_object('quote_id', p_quote_id, 'status', 'expired', 'approved', false);
   end if;
 
-  -- (ii) status-guarded atomic accept
+  -- (iii) status-guarded atomic accept
   update public.quotes
      set status = 'accepted'::public.quote_status,
          accepted_at = now(),
@@ -626,15 +638,15 @@ begin
     raise exception 'This quote is not awaiting a decision (current status: %)', v_status;
   end if;
 
-  -- (iii) revoke outstanding active approval tokens — mirrors 0015 cleanup
+  -- (iv) revoke outstanding active approval tokens — mirrors 0015 cleanup
   update public.quote_approval_tokens
      set revoked_at = now()
    where quote_id = p_quote_id and revoked_at is null and decided_at is null;
 
-  -- (iv) audit log — ATOMIC & FAIL-CLOSED (NO exception handler). Identity/tenant
-  --      fields come from the VERIFIED active profile + the Auth user, not the
-  --      client and not the editable customers.email. Any failure here rolls back
-  --      (ii) and (iii) with it.
+  -- (v) audit log — ATOMIC & FAIL-CLOSED (NO exception handler). Identity/tenant
+  --     fields come from the VERIFIED active profile + the Auth user, not the
+  --     client and not the editable customers.email. Any failure here rolls back
+  --     the accept + token revoke with it.
   select p.role::text, p.company_id, u.email
     into v_role, v_company, v_email
   from public.profiles p
@@ -653,7 +665,7 @@ begin
      'Customer approved quote ' || coalesce(v_number, v_updated::text) || ' via portal',
      jsonb_build_object('source','portal','customer_id', v_cust));
 
-  return json_build_object('quote_id', v_updated, 'status', 'accepted');
+  return json_build_object('quote_id', v_updated, 'status', 'accepted', 'approved', true);
 end;
 $$;
 
@@ -794,6 +806,19 @@ group by auth_user_id having count(*) > 1;
 select p.proname,
        (pg_get_functiondef(p.oid) ~* 'exception[[:space:]]+when') as has_exception_handler,
        (pg_get_functiondef(p.oid) ~* 'insert into[[:space:]]+(public\.)?activity_log') as references_activity_log
+from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+where n.nspname='public' and p.proname='portal_approve_quote';
+
+-- C11. EXPIRED branch cannot roll back an intended status update: the function
+--      must NOT raise on expiry (which would roll back the 'expired' flip) and
+--      MUST return a persisted 'expired' result. Expect:
+--        raises_on_expiry     = false   (no `raise exception ... expired`)
+--        returns_expired      = true    (a `return ... 'expired'` path exists)
+--        persists_expired_upd = true    (an UPDATE sets status='expired')
+select p.proname,
+       (pg_get_functiondef(p.oid) ~* 'raise[[:space:]]+exception[^;]*expired') as raises_on_expiry,
+       (pg_get_functiondef(p.oid) ~* 'return[^;]*expired')                     as returns_expired,
+       (pg_get_functiondef(p.oid) ~* 'set[[:space:]]+status[^;]*expired')      as persists_expired_upd
 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
 where n.nspname='public' and p.proname='portal_approve_quote';
 

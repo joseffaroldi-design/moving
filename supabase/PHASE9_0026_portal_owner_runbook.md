@@ -166,8 +166,8 @@ resolver has no client grant. None accept a company_id or customer_id argument.
 | `portal_list_jobs` | `p_limit int=20`, `p_offset int=0` | `{ items:[{id,job_number,status,scheduled_start,scheduled_end,origin_address,destination_address}], count, limit, offset }`. Order: scheduled_start desc nulls last, id desc. |
 | `portal_get_job` | `p_job_id uuid` | `{id,job_number,status,scheduled_start,scheduled_end,origin_address,destination_address}`. Owned only. No dispatch_notes/crew/truck. |
 | `portal_list_invoices` | `p_limit int=20`, `p_offset int=0` | `{ items:[{id,invoice_number,status,total,amount_paid,balance,due_date,sent_at}], count, limit, offset }`. Non-draft only. Order: sent_at desc nulls last, id desc. |
-| `portal_get_invoice` | `p_invoice_id uuid` | `{id,invoice_number,status,subtotal,tax_rate,tax,total,amount_paid,balance,notes,due_date,sent_at, line_items:[...], payments:[{amount,method,paid_at,note}]}`. Owned + non-draft only. |
-| `portal_approve_quote` | `p_quote_id uuid` | `{quote_id,status:'accepted'}`. Reproduces 0015 invariants + optional audit log. |
+| `portal_get_invoice` | `p_invoice_id uuid` | `{id,invoice_number,status,subtotal,tax_rate,tax,total,amount_paid,balance,due_date,sent_at, line_items:[{description,quantity,unit_price,total,sort_order}], payments:[{amount,method,paid_at}]}`. Owned + non-draft only. **`invoices.notes` and `invoice_payments.note` intentionally OMITTED** (staff-authored freeform, not proven customer-facing). |
+| `portal_approve_quote` | `p_quote_id uuid` | On accept: `{quote_id,status:'accepted',approved:true}` (+ token revoke + atomic fail-closed audit). On expired-by-date: atomically flips quote to `expired` and returns `{quote_id,status:'expired',approved:false}` **(persisted, no raise)** — intentional divergence from 0015 (which raises + rolls back its expired flip). |
 | `portal_update_contact` | `p_first_name,p_last_name,p_email,p_phone text` | `{customer_id,updated:true}`. Updates only own name/email/phone (blank = keep). |
 
 ---
@@ -194,6 +194,8 @@ resolver has no client grant. None accept a company_id or customer_id argument.
    - C9 returns **0 rows**.
    - C10: `has_exception_handler = false` AND `references_activity_log = true`
      (proves the audit write is present and fail-closed — no handler can suppress it).
+   - C11: `raises_on_expiry = false`, `returns_expired = true`, `persists_expired_upd = true`
+     (the expired branch flips-and-returns; it cannot roll back an intended status update).
 4. **Part D (link one customer).** Edit the two UUIDs, run the guarded `DO`
    block. It aborts on any validation failure and updates exactly one row.
    Then, signed in as that user, `select public._portal_current_customer_id();`
@@ -217,13 +219,14 @@ and separately as a **staff** user and **anon**.
 | P1 | Linked customer | `portal_list_quotes()` | Only own non-draft quotes; draft absent; count matches; ordered created_at desc |
 | P2 | Linked customer | `portal_get_quote(own non-draft)` | Full whitelisted quote + line items |
 | P3 | Linked customer | `portal_list_jobs()` / `portal_get_job(own)` | Own jobs; **no** dispatch_notes/crew/truck fields present |
-| P4 | Linked customer | `portal_list_invoices()` / `portal_get_invoice(own non-draft)` | Own invoices + line items + payments; **no** recorded_by/company_id |
-| P5 | Linked customer | `portal_approve_quote(own 'sent'/'viewed')` | `{status:'accepted'}`; quote→accepted; accepted_at set; outstanding tokens revoked; exactly one `activity_log` row written **atomically** (company_id + actor_role from active profile; actor_email from auth.users) |
+| P4 | Linked customer | `portal_list_invoices()` / `portal_get_invoice(own non-draft)` | Own invoices + line items + payments; **no** recorded_by/company_id; **no `notes` on invoice, no `note` on payments** |
+| P5 | Linked customer | `portal_approve_quote(own 'sent'/'viewed', not expired)` | `{status:'accepted',approved:true}`; quote→accepted; accepted_at set; outstanding tokens revoked; exactly one `activity_log` row written **atomically** (company_id + actor_role from active profile; actor_email from auth.users) |
 | P6 | Linked customer | `portal_update_contact('New','Name','e@x.com','555')` | `{updated:true}`; only name/email/phone changed |
 | N1 | Linked customer | `portal_get_quote(other customer's quote id)` | error `Quote not found` (no leak) |
 | N2 | Linked customer | `portal_get_quote(own **draft** quote id)` | error `Quote not found` (drafts hidden) |
-| N3 | Linked customer | `portal_approve_quote(own 'draft'/'accepted'/'expired')` | error `not awaiting a decision` / `has expired`; status unchanged |
-| N4 | Linked customer | `portal_approve_quote(expired-by-date, token still valid)` | quote flips to `expired`; error `has expired`; cannot accept |
+| P6 | Linked customer | `portal_approve_quote(own 'sent'/'viewed', **expired-by-date**)` | `{status:'expired',approved:false}`; quote **persisted** as `expired` (verify via re-select: status='expired'); NOT accepted; no audit row |
+| N3 | Linked customer | `portal_approve_quote(own 'draft'/'accepted'/'expired'/'rejected')` | error `not awaiting a decision (current status: …)`; status unchanged; no audit row |
+| N4 | Linked customer | `portal_approve_quote(expired-by-date, token still valid)` | quote flips to `expired` and returns `{status:'expired',approved:false}`; **cannot accept**; the expired flip is committed (not rolled back) |
 | N5 | Linked customer | direct `select * from public.quotes` (Data API) | 0 rows (no customer SELECT policy) |
 | N6 | Linked customer | direct `select * from public.jobs / invoices / customers` | 0 rows (staff-only policies) |
 | N7 | Staff (owner/ops/sales/dispatch) | all existing quote/job/invoice reads & RPCs | unchanged — still work exactly as before |
