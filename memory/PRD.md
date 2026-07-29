@@ -515,8 +515,20 @@ RC1 migration files: /app/supabase/migrations/ (RC1_R2/R3/R5, 0018–0023, verif
 ## Phase 9 — Customer Portal foundation (2026-06, AUTHORED — pending owner execution)
 Architecture APPROVED: **explicit-field read RPCs** (no customer base-table SELECT
 policies; RLS filters rows not columns, so broad SELECT would leak internal cols).
-- **0024_customer_portal_access.sql — REVISED & AUTHORED (owner to execute).**
-  Adds `customers.auth_user_id` (nullable FK + partial unique index) and:
+Dependency-ordered migrations (owner runs 0024 then 0025):
+- **0024_activity_log_hardened.sql — AUTHORED (owner to execute FIRST).** The
+  legacy 0003 activity_log was never applied here (`to_regclass` null). Creates a
+  HARDENED audit sink: `company_id NOT NULL` (fixes cross-tenant read leak),
+  append-only (authenticated=SELECT only; anon/PUBLIC none; NO client INSERT),
+  writes only via SECURITY DEFINER functions that derive actor/company server-side
+  (fixes forgeable actor_email/role/metadata). RLS enabled, NOT forced (analysed:
+  won't block DEFINER insert, adds no client-facing protection since clients have
+  no write grant). Indexes: (company_id,created_at desc),(entity_type,entity_id),
+  (actor_id),(created_at desc). Company-scoped active-staff-only read policy;
+  customers excluded. Runbook: `/app/supabase/PHASE9_0024_activity_log_owner_runbook.md`.
+- **0025_customer_portal_access.sql — REVISED & AUTHORED (was 0024; renamed for
+  dependency order).** Adds `customers.auth_user_id` (nullable FK + partial unique
+  index) and:
   - `_portal_current_customer_id()` internal resolver — auth.uid() ONLY (no email,
     no LIMIT 1); requires active `customer` profile + non-null company matching the
     customer's company; EXECUTE revoked from all clients.
@@ -528,13 +540,19 @@ policies; RLS filters rows not columns, so broad SELECT would leak internal cols
   - `portal_approve_quote(uuid)` — reproduces authoritative 0015 acceptance
     invariants (expiry guard + status-guarded atomic `UPDATE...RETURNING` on
     sent/viewed + revoke outstanding approval tokens), row locked FOR UPDATE;
-    OPTIONAL wrapped server-derived activity_log write (deletable block iv).
+    KEPT server-derived audit write to hardened activity_log in the SAME
+    transaction (actor_id=auth.uid(); company_id+actor_email from own customer
+    record; actor_role='customer'; no client-supplied identity).
   - `portal_update_contact(...)` — customer edits only own name/email/phone.
   - All 8 client RPCs: authenticated EXECUTE only; anon/PUBLIC none. NO staff RLS/
     grant/business-logic changes. Legacy email-based `current_customer_id()` left
-    dormant/untouched (optional Part F hardening documented).
-  - Owner runbook + column-exposure matrix + acceptance-dependency analysis +
-    positive/negative verification matrix + guarded Part D linking transaction +
-    rollback + Security Advisor step: `/app/supabase/PHASE9_0024_owner_runbook.md`.
-  - STATUS: awaiting owner approval + manual execution (author executes nothing).
-    No portal UI built yet (Phase 9 Priority 1 UI is the next step post-0024).
+    dormant/untouched; Part A3b/A3c inventory + Part F revoke-hardening (gated on
+    zero-dependency evidence, no drop).
+  - Runbook + column-exposure matrix + acceptance-dependency analysis + pos/neg
+    verification matrix + guarded Part D linking transaction + rollback + Security
+    Advisor step: `/app/supabase/PHASE9_0025_portal_owner_runbook.md`.
+- Preflight so far: portal Part A1 PASS (auth_user_id absent), A2 PASS for 8 base
+  tables, A2b confirmed activity_log ABSENT (→ 0024 authored). Remaining portal
+  A3/A3b/A3c/A4/A5/A6 pending owner.
+- STATUS: awaiting owner approval + manual execution (author executes nothing).
+  No portal UI built yet (Phase 9 Priority 1 UI is the next step post-0025).

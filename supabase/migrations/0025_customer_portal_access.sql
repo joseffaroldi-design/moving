@@ -1,6 +1,11 @@
 -- =====================================================================
--- 0024_customer_portal_access.sql   [Phase 9 — Customer Portal foundation]
+-- 0025_customer_portal_access.sql   [Phase 9 — Customer Portal foundation]
 -- OWNER-EXECUTED ONLY. The author does NOT run this. Additive & security-focused.
+--
+-- DEPENDS ON: 0024_activity_log_hardened.sql MUST be applied first. This
+--   migration's portal_approve_quote writes ONE audit row to public.activity_log
+--   in the SAME transaction as quote acceptance; with check_function_bodies on,
+--   CREATE FUNCTION portal_approve_quote aborts if activity_log is absent.
 --
 -- ARCHITECTURE (approved 2026-06): EXPLICIT-FIELD READ RPCs.
 --   Customers NEVER get a base-table SELECT policy. All portal reads flow
@@ -14,21 +19,24 @@
 --   * Adds 6 read RPCs (quotes/jobs/invoices list+detail) — explicit JSON only.
 --   * Adds portal_approve_quote — reproduces the authoritative 0015 acceptance
 --     invariants (expiry guard + status-guarded atomic accept + token revoke)
---     in ONE transaction, plus an OPTIONAL, server-derived audit-log write.
+--     in ONE transaction, plus a KEPT server-derived audit-log write whose
+--     actor_id/actor_email/actor_role/company_id are ALL derived from auth.uid()
+--     + the customer record (no client-supplied identity).
 --   * Adds portal_update_contact — customer edits ONLY their own name/email/phone.
 --
 -- WHAT THIS DOES NOT DO
 --   * Does NOT add/alter/drop any staff RLS policy.
---   * Does NOT change table grants on the 7 base tables.
+--   * Does NOT change table grants on the 7 base tables or on activity_log.
 --   * Does NOT touch existing invoice/quote/job RPCs, Edge Functions, or the
 --     legacy email-based public.current_customer_id() (dormant + non-executable
---     since 0006; see Part A / optional note).
+--     since 0006; see Part A3b/A3c + Part F).
 --   * anon & PUBLIC receive nothing.
 --
--- RUN ORDER: Part A (read-only preflight; PASTE RESULTS + SAVE A3 output)
---   -> review -> Part B (migration) -> Part C (read-only verification)
---   -> Part D (owner links ONE customer<->user by explicit IDs) -> done.
---   Part E is the rollback. Part F is an OPTIONAL legacy-resolver hardening.
+-- RUN ORDER: (run 0024_activity_log_hardened.sql first) -> Part A (read-only
+--   preflight; PASTE RESULTS + SAVE A3 output) -> review -> Part B (migration)
+--   -> Part C (read-only verification) -> Part D (owner links ONE customer<->
+--   user by explicit IDs) -> done. Part E is the rollback. Part F is the
+--   legacy-resolver hardening (gated on Part A3c evidence).
 -- =====================================================================
 
 
@@ -54,7 +62,7 @@ where table_schema='public' and (
    or (table_name='invoices'           and column_name in ('id','company_id','customer_id','invoice_number','status','subtotal','tax_rate','tax','total','amount_paid','balance','notes','due_date','sent_at'))
    or (table_name='invoice_line_items' and column_name in ('id','invoice_id','description','quantity','unit_price','total','sort_order'))
    or (table_name='invoice_payments'   and column_name in ('id','invoice_id','amount','method','paid_at','note'))
-   or (table_name='activity_log'       and column_name in ('actor_id','actor_email','actor_role','action','entity_type','entity_id','summary','metadata')) )
+   or (table_name='activity_log'       and column_name in ('company_id','actor_id','actor_email','actor_role','action','entity_type','entity_id','summary','metadata')) )
 group by table_name order by table_name;
 
 -- A3. CAPTURE + SAVE the exact prior definitions of anything that shares a name
@@ -492,13 +500,16 @@ grant execute on function public.portal_get_invoice(uuid) to authenticated;
 --     acceptance side-effects. The row is locked FOR UPDATE to serialise
 --     against a concurrent token-path decision.
 --
---     SCOPE NOTE (audit): step (iv) writes ONE activity_log row with every
---     field derived server-side (actor_id = auth.uid(), role hardcoded
---     'customer', no client-trusted identity). It is wrapped so a logging
---     hiccup can never block the authoritative acceptance. Customers cannot
---     READ activity_log (staff-only read policy, 0003). If you prefer to keep
---     portal parity with the token path (which does NOT log), delete block (iv)
---     before running — the acceptance itself is unaffected.
+--     AUDIT (KEPT per owner decision): step (iv) writes ONE activity_log row in
+--     THIS SAME transaction. Every identity/tenant field is derived server-side
+--     — actor_id = auth.uid(); company_id + actor_email from the caller's own
+--     customer record; actor_role hardcoded 'customer'. No client-supplied
+--     actor/customer/company identity is trusted. Depends on
+--     0024_activity_log_hardened.sql (must be applied first). Customers cannot
+--     READ activity_log (company-scoped, staff-only read policy). The insert is
+--     wrapped in a savepoint sub-block so an unexpected logging failure cannot
+--     roll back or block the authoritative acceptance, but on success it commits
+--     atomically with the status change.
 -- ---------------------------------------------------------------------
 create or replace function public.portal_approve_quote(p_quote_id uuid)
 returns json
@@ -513,6 +524,7 @@ declare
   v_updated uuid;
   v_number  text;
   v_email   text;
+  v_company uuid;
 begin
   if v_cust is null then raise exception 'Not authorized as a customer'; end if;
 
@@ -551,13 +563,15 @@ begin
      set revoked_at = now()
    where quote_id = p_quote_id and revoked_at is null and decided_at is null;
 
-  -- (iv) OPTIONAL server-derived audit log (safe to delete; see SCOPE NOTE)
+  -- (iv) KEPT audit log — all identity/tenant fields derived server-side.
+  --      company_id + actor_email come from the caller's OWN customer record.
   begin
-    select email into v_email from public.customers where id = v_cust;
+    select company_id, email into v_company, v_email
+    from public.customers where id = v_cust;
     insert into public.activity_log
-      (actor_id, actor_email, actor_role, action, entity_type, entity_id, summary, metadata)
+      (company_id, actor_id, actor_email, actor_role, action, entity_type, entity_id, summary, metadata)
     values
-      (auth.uid(), v_email, 'customer', 'quote.approved', 'quote', v_updated::text,
+      (v_company, auth.uid(), v_email, 'customer', 'quote.approved', 'quote', v_updated::text,
        'Customer approved quote ' || coalesce(v_number, v_updated::text) || ' via portal',
        jsonb_build_object('source','portal','customer_id', v_cust));
   exception when others then

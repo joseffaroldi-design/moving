@@ -1,7 +1,9 @@
-# Phase 9 — Customer Portal Access (0024) — Owner Runbook & Design Dossier
+# Phase 9 — Customer Portal Access (0025) — Owner Runbook & Design Dossier
 
 Author-and-review only. Nothing has been executed. No portal UI was built.
-Migration file: `/app/supabase/migrations/0024_customer_portal_access.sql`
+Migration file: `/app/supabase/migrations/0025_customer_portal_access.sql`
+Depends on: `0024_activity_log_hardened.sql` (apply first — see its own runbook
+`PHASE9_0024_activity_log_owner_runbook.md`).
 
 Architecture (approved): **explicit-field read RPCs**. Customers never receive a
 base-table `SELECT` policy; every read returns an explicit whitelist of
@@ -27,7 +29,7 @@ the migration re-confirms every column against the live DB before Part B runs.
 | id | Identity | No (used internally by resolver; never returned) |
 | company_id | Internal | No |
 | first_name, last_name, email, phone | Safe | Editable via `portal_update_contact` (not returned by a read RPC) |
-| auth_user_id | Identity/security | No (added by 0024) |
+| auth_user_id | Identity/security | No (added by 0025) |
 | created_by | Internal | No |
 | created_at / updated_at | Internal | No |
 | notes (if present) | Internal | No |
@@ -100,9 +102,10 @@ Evidence gathered (read of 0003, 0011–0015):
 - **No triggers on `public.quotes`.** No `CREATE TRIGGER` exists in any migration
   for quotes. Quote acceptance does not auto-create a job (conversion is a
   separate manual RPC `convert_quote_to_job`, 0016b).
-- **Activity log is not trigger-driven.** `activity_log` (0003) is written by
-  clients under an RLS insert policy (`with check actor_id = auth.uid()`); no DB
-  trigger writes it. `respond_to_quote_approval` itself does **not** log.
+- **Activity log is not trigger-driven.** No DB trigger writes an audit row on
+  quote status change; `respond_to_quote_approval` (0015) itself does **not**
+  log. (Also: `activity_log` did not exist in this DB until the new
+  `0024_activity_log_hardened.sql` — see that runbook.)
 - Therefore the complete set of authoritative acceptance side-effects is:
   1. **Expiry guard** — if `quotes.expires_at <= now()`, flip status to
      `expired` and refuse acceptance.
@@ -124,14 +127,19 @@ one would require editing 0015 and re-verifying the token path — out of scope 
 this migration. Instead the invariants are reproduced verbatim and enumerated
 here for audit.
 
-**Scope decision (owner-approved, Requirement 1 & 9):** step (iv) writes ONE
-`activity_log` row for the approval **inside the same acceptance transaction**,
-every field derived server-side (`actor_id = auth.uid()`, role hardcoded
-`'customer'`, no client-supplied actor/customer/company identity). It is wrapped
-in a savepoint sub-block so a logging failure cannot roll back or block the
+**Scope decision (owner-approved).** Step (iv) writes ONE `activity_log` row for
+the approval **inside the same acceptance transaction**. Every identity/tenant
+field is derived server-side and cannot be forged by the client:
+`actor_id = auth.uid()`; `company_id` and `actor_email` from the caller's OWN
+`customers` record; `actor_role` hardcoded `'customer'`. Only the descriptive
+fields (`action='quote.approved'`, `entity_type='quote'`, `entity_id`, `summary`,
+`metadata`) are set by the trusted function body — the client supplies none of
+them (it calls `portal_approve_quote(quote_id)` only). It is wrapped in a
+savepoint sub-block so a logging failure cannot roll back or block the
 authoritative acceptance, but on success it commits atomically with the status
-change. Customers cannot read `activity_log` (staff-only read policy, 0003).
-This block is **KEPT** (not optional) per owner decision.
+change. Customers cannot read `activity_log` (company-scoped, staff-only read
+policy in `0024_activity_log_hardened.sql`). This block is **KEPT** per owner
+decision, and the target table is the hardened `activity_log` (dependency 0024).
 
 ---
 
@@ -181,8 +189,8 @@ resolver has no client grant. None accept a company_id or customer_id argument.
    must return the customer id.
 5. **Security Advisor (Requirement 15).** In the Supabase Dashboard →
    *Advisors → Security Advisor*, run a fresh scan after Part B. Expected: no
-   new ERROR/WARN attributable to 0024. Specifically confirm no
-   "RLS disabled"/"policy exposes data" finding on the 7 base tables (0024 adds
+   new ERROR/WARN attributable to 0025. Specifically confirm no
+   "RLS disabled"/"policy exposes data" finding on the 7 base tables (0025 adds
    no policies), and that the new functions are not flagged for a mutable
    `search_path` (they pin `public, pg_temp`). Paste the diff vs. your last scan.
 
@@ -199,7 +207,7 @@ and separately as a **staff** user and **anon**.
 | P2 | Linked customer | `portal_get_quote(own non-draft)` | Full whitelisted quote + line items |
 | P3 | Linked customer | `portal_list_jobs()` / `portal_get_job(own)` | Own jobs; **no** dispatch_notes/crew/truck fields present |
 | P4 | Linked customer | `portal_list_invoices()` / `portal_get_invoice(own non-draft)` | Own invoices + line items + payments; **no** recorded_by/company_id |
-| P5 | Linked customer | `portal_approve_quote(own 'sent'/'viewed')` | `{status:'accepted'}`; quote→accepted; accepted_at set; outstanding tokens revoked; one activity_log row (if block iv kept) |
+| P5 | Linked customer | `portal_approve_quote(own 'sent'/'viewed')` | `{status:'accepted'}`; quote→accepted; accepted_at set; outstanding tokens revoked; exactly one `activity_log` row written (company_id + actor_email server-derived, actor_role='customer') |
 | P6 | Linked customer | `portal_update_contact('New','Name','e@x.com','555')` | `{updated:true}`; only name/email/phone changed |
 | N1 | Linked customer | `portal_get_quote(other customer's quote id)` | error `Quote not found` (no leak) |
 | N2 | Linked customer | `portal_get_quote(own **draft** quote id)` | error `Quote not found` (drafts hidden) |
@@ -218,16 +226,17 @@ and separately as a **staff** user and **anon**.
 ## 6. Rollback behavior (Part E)
 
 Part E drops the 9 functions and the unique index (and, only if you choose, the
-`auth_user_id` column). Because 0024:
+`auth_user_id` column). Because 0025:
 - creates a **new** internal resolver name (`_portal_current_customer_id`) and
   does **not** touch legacy `public.current_customer_id()`,
 - adds **no** base-table SELECT policies,
 - changes **no** table grants or staff policies,
 
-…the rollback restores the exact pre-0024 state with no residue. Staff RLS,
-staff RPCs, and invoice/quote/job business logic are never affected by either
-the migration or the rollback. If any customer has already been linked and you
-drop the column, those links are lost (re-link via Part D after re-applying).
+…the rollback restores the exact pre-0025 state with no residue. Staff RLS,
+staff RPCs, invoice/quote/job business logic, and the `activity_log` table
+(owned by 0024) are never affected by either the migration or the 0025 rollback.
+If any customer has already been linked and you drop the column, those links are
+lost (re-link via Part D after re-applying).
 
 `Part F` is a **separate** legacy-resolver hardening step (run outside the Part B
 transaction). Per owner decision the dormant email-based
