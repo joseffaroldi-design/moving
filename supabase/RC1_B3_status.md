@@ -53,9 +53,18 @@ Legacy invoice objects reconciled and new invoice schema/RPCs deployed and verif
   REVOKE ALL from anon/PUBLIC/authenticated; GRANT SELECT to service_role only.
   No table/RLS/function/data/ownership change. verify_0023 (Grids A-C) authored. Owner-executed; NOT run yet.
 
+- **0023_b3_views_service_role_only.sql**: DRAFTED + EXECUTED by owner. verify_0023 Grid C = PASS.
+  REVOKE ALL from anon/PUBLIC/authenticated; GRANT SELECT to service_role only.
+  Grid C (owner-executed) for all 3 views: anon_select=false, authenticated_select=false,
+  service_role_select=true. View defs + security_invoker=true preserved (grants-only migration).
+  Access model locked to the secured Edge Function (service_role) path.
+
 ## Current status
-B3: SCHEMA + RPCs VERIFIED (Step D PASS). Not fully closed until Step E views are rebuilt with
-security_invoker and re-verified.
+B3: **CLOSED**. Legacy invoice objects reconciled (0021), new invoice schema + RPCs deployed &
+verified (0018/Step D PASS), dependent views rebuilt securely with security_invoker=true and
+non-fan-out metrics (0022), and locked to service_role-only access (0023). No anon/PUBLIC/
+authenticated exposure. R2 rollback baseline preserved (588 grant rows / 42 relations,
+48 default-priv rows); R4 not executed.
 
 ## Boundary
 All DDL/verification is owner-executed via Supabase SQL editor. Agent authors SQL only; executes nothing.

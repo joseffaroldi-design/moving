@@ -444,3 +444,34 @@ read-only verification JSON → then frontend/RPCs wired.
   until Emergent runs `npm run start` (Node server) and proxies nginx to it. Requires Emergent
   Support / a Next.js-SSR-capable deploy image. NOTE: preview now runs prod mode (no hot reload);
   after code edits, rebuild (rm -rf .next && yarn build) + restart frontend.
+
+
+## RC1 — Production Readiness Engineering (2026-06, owner-executed SQL boundary)
+Strict boundary: agent authors SQL only; owner runs all DDL/verification in Supabase SQL Editor.
+Three critical blockers tracked. Status snapshot:
+- **B1 (mvp-dashboard anon exposure): PARTIAL.** Secured Edge Function deployed (strict JWT/
+  company-scoped); frontend token forwarding wired. Owner smoke test passed. Authorization probes
+  C–H deferred (need test creds). Runbook: /app/supabase/RC1_B1_owner_runbook.md.
+- **B2 (anon DB exposure): MITIGATED WITH DOCUMENTED PLATFORM RESIDUAL.** R2 pre-snapshot preserved
+  (rc1_backup.grant_snapshot=588 rows/42 relations; default_priv_snapshot=48 rows). R3 emergency anon
+  lockdown + R5 default-privileges fix applied (postgres-owned unsafe defaults removed, VERIFIED).
+  supabase_admin default ACL rows remain = platform-owned residual (insufficient privilege to alter).
+  R4 rollback NOT executed. Status doc: /app/supabase/RC1_B2_status.md.
+- **B3 (legacy invoice schema drift): CLOSED (2026-06).** See /app/supabase/RC1_B3_status.md.
+  - 0021 reconciliation: dropped legacy invoices/invoice_line_items/payments + dependent views;
+    snapshots in rc1_backup. Verified.
+  - 0018 new invoice schema + SECURITY DEFINER RPCs + auto-draft-on-completion hook. Step D verify PASS
+    (owner=postgres, security_definer, safe search_path, transition guard, idempotent, unique index).
+  - 0022 rebuilt the 3 dependent views (owner_dashboard_metrics, unpaid_invoice_queue, job_profitability)
+    with security_invoker=true; owner_dashboard_metrics rewritten to non-fan-out per-company scalar
+    subqueries (D1=sent_at basis, D2=sent_at AS issue_date, D3=scalar subqueries). Verify Grids A/B/C/E/F
+    PASS; Grid D revealed authenticated lacked SELECT on companies+payroll_entries.
+  - 0023 (grants-only): locked all 3 views to service_role ONLY (REVOKE anon/PUBLIC/authenticated;
+    GRANT SELECT service_role). Verify Grid C PASS. Access model = secured Edge Function path only;
+    authenticated access to companies/payroll_entries intentionally NOT broadened.
+
+### RC1 gate
+Production approval: NO. Phase 8 (Invoices & Payments feature work): LOCKED until owner authorizes.
+Remaining RC1 items: B1 authorization probes C–H (owner, needs creds); optional B2 supabase_admin
+residual via Supabase support (RC1_supabase_support_request.md); SSR prod-deploy platform limitation.
+RC1 migration files: /app/supabase/migrations/ (RC1_R2/R3/R5, 0018–0023, verify_002x).
