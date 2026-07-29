@@ -1,11 +1,16 @@
 -- =====================================================================
--- 0025_customer_portal_access.sql   [Phase 9 — Customer Portal foundation]
+-- 0026_customer_portal_access.sql   [Phase 9 — Customer Portal foundation]
 -- OWNER-EXECUTED ONLY. The author does NOT run this. Additive & security-focused.
 --
--- DEPENDS ON: 0024_activity_log_hardened.sql MUST be applied first. This
---   migration's portal_approve_quote writes ONE audit row to public.activity_log
---   in the SAME transaction as quote acceptance; with check_function_bodies on,
---   CREATE FUNCTION portal_approve_quote aborts if activity_log is absent.
+-- DEPENDS ON (dependency-ordered chain):
+--   1) 0024_activity_log_hardened.sql — portal_approve_quote writes ONE audit row
+--      to public.activity_log in the SAME transaction as quote acceptance; with
+--      check_function_bodies on, CREATE FUNCTION aborts if activity_log is absent.
+--   2) 0025_quarantine_legacy_portal_policies.sql — removes the 5 legacy
+--      customer-self policies + is_current_customer(uuid) so the unsafe email-based
+--      public.current_customer_id() has ZERO dependencies. RE-RUN this file's
+--      Part A AFTER 0025 quarantine so A3c/D show zero resolver dependents before
+--      Part F (legacy-resolver hardening) is executed.
 --
 -- ARCHITECTURE (approved 2026-06): EXPLICIT-FIELD READ RPCs.
 --   Customers NEVER get a base-table SELECT policy. All portal reads flow
@@ -91,10 +96,18 @@ where n.nspname='public'
                     'portal_approve_quote','portal_update_contact')
 order by p.proname;
 
+-- Policy collision check. Part B (0026) creates NO policies, so this catches
+-- pre-existing customer-facing policies only. After 0025 quarantine this must be
+-- 0 rows. NOTE: the preserved staff policies portal_tokens_manager_select/write
+-- are intentionally EXCLUDED (they are legitimate manager policies, not portal
+-- customer policies and do not reference the resolver).
 select tablename, policyname, cmd, roles, qual, with_check
 from pg_policies
 where schemaname='public'
-  and (policyname ilike '%customer_self%' or policyname ilike '%portal%')
+  and (policyname ilike '%customer_self%'
+       or policyname ilike 'portal_list_%' or policyname ilike 'portal_get_%'
+       or policyname ilike 'portal_approve_%' or policyname ilike 'portal_update_%'
+       or policyname ilike '%portal_activity_member%')
 order by tablename, policyname;
 
 -- A3b. LEGACY RESOLVER FOCUS — exact owner + full EXECUTE grants of the legacy
@@ -857,7 +870,7 @@ end $$;
 
 
 -- =====================================================================
--- PART E — ROLLBACK (removes ONLY objects created by 0025)
+-- PART E — ROLLBACK (removes ONLY objects created by 0026)
 -- =====================================================================
 -- Drops the 9 functions + the unique index. Optionally drops the column
 -- (ONLY if you are certain no links exist / no data depends on it). Because

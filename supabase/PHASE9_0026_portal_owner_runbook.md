@@ -1,9 +1,13 @@
-# Phase 9 — Customer Portal Access (0025) — Owner Runbook & Design Dossier
+# Phase 9 — Customer Portal Access (0026) — Owner Runbook & Design Dossier
 
 Author-and-review only. Nothing has been executed. No portal UI was built.
-Migration file: `/app/supabase/migrations/0025_customer_portal_access.sql`
-Depends on: `0024_activity_log_hardened.sql` (apply first — see its own runbook
-`PHASE9_0024_activity_log_owner_runbook.md`).
+Migration file: `/app/supabase/migrations/0026_customer_portal_access.sql`
+Dependency chain (apply in order): `0024_activity_log_hardened.sql` (done) →
+`0025_quarantine_legacy_portal_policies.sql` (removes 5 legacy customer-self
+policies + `is_current_customer` so the email resolver has zero deps) →
+this `0026`. Re-run this file's Part A AFTER 0025 quarantine. See runbooks
+`PHASE9_0024_activity_log_owner_runbook.md` and
+`PHASE9_0025_quarantine_owner_runbook.md`.
 
 Architecture (approved): **explicit-field read RPCs**. Customers never receive a
 base-table `SELECT` policy; every read returns an explicit whitelist of
@@ -29,7 +33,7 @@ the migration re-confirms every column against the live DB before Part B runs.
 | id | Identity | No (used internally by resolver; never returned) |
 | company_id | Internal | No |
 | first_name, last_name, email, phone | Safe | Editable via `portal_update_contact` (not returned by a read RPC) |
-| auth_user_id | Identity/security | No (added by 0025) |
+| auth_user_id | Identity/security | No (added by 0026) |
 | created_by | Internal | No |
 | created_at / updated_at | Internal | No |
 | notes (if present) | Internal | No |
@@ -196,8 +200,8 @@ resolver has no client grant. None accept a company_id or customer_id argument.
    must return the customer id.
 5. **Security Advisor (Requirement 15).** In the Supabase Dashboard →
    *Advisors → Security Advisor*, run a fresh scan after Part B. Expected: no
-   new ERROR/WARN attributable to 0025. Specifically confirm no
-   "RLS disabled"/"policy exposes data" finding on the 7 base tables (0025 adds
+   new ERROR/WARN attributable to 0026. Specifically confirm no
+   "RLS disabled"/"policy exposes data" finding on the 7 base tables (0026 adds
    no policies), and that the new functions are not flagged for a mutable
    `search_path` (they pin `public, pg_temp`). Paste the diff vs. your last scan.
 
@@ -230,7 +234,7 @@ and separately as a **staff** user and **anon**.
 
 ### T-FAILCLOSED — transactional proof that a failed audit insert rolls back everything
 
-Prerequisites: `0024` + `0025` applied; one **linked** customer (Part D) who owns
+Prerequisites: `0024` + `0025` (quarantine) + `0026` applied; one **linked** customer (Part D) who owns
 a quote in status `sent` or `viewed`. You need that customer's `auth.users.id`
 (`<AUTH_USER_ID>`) and the quote id (`<QUOTE_ID>`). Run in the SQL Editor.
 
@@ -284,15 +288,15 @@ removed) to confirm a real approval succeeds and writes exactly one audit row.
 ## 6. Rollback behavior (Part E)
 
 Part E drops the 9 functions and the unique index (and, only if you choose, the
-`auth_user_id` column). Because 0025:
+`auth_user_id` column). Because 0026:
 - creates a **new** internal resolver name (`_portal_current_customer_id`) and
   does **not** touch legacy `public.current_customer_id()`,
 - adds **no** base-table SELECT policies,
 - changes **no** table grants or staff policies,
 
-…the rollback restores the exact pre-0025 state with no residue. Staff RLS,
+…the rollback restores the exact pre-0026 state with no residue. Staff RLS,
 staff RPCs, invoice/quote/job business logic, and the `activity_log` table
-(owned by 0024) are never affected by either the migration or the 0025 rollback.
+(owned by 0024) are never affected by either the migration or the 0026 rollback.
 If any customer has already been linked and you drop the column, those links are
 lost (re-link via Part D after re-applying).
 

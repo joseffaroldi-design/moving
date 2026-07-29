@@ -515,44 +515,45 @@ RC1 migration files: /app/supabase/migrations/ (RC1_R2/R3/R5, 0018–0023, verif
 ## Phase 9 — Customer Portal foundation (2026-06, AUTHORED — pending owner execution)
 Architecture APPROVED: **explicit-field read RPCs** (no customer base-table SELECT
 policies; RLS filters rows not columns, so broad SELECT would leak internal cols).
-Dependency-ordered migrations (owner runs 0024 then 0025):
-- **0024_activity_log_hardened.sql — AUTHORED (owner to execute FIRST).** The
-  legacy 0003 activity_log was never applied here (`to_regclass` null). Creates a
+Dependency-ordered migrations: 0024 (done) → 0025 quarantine → 0026 portal.
+- **0024_activity_log_hardened.sql — APPLIED & VERIFIED (owner, 2026-06).** The
+  legacy 0003 activity_log was never applied here (`to_regclass` null). Created a
   HARDENED audit sink: `company_id NOT NULL` (fixes cross-tenant read leak),
   append-only (authenticated=SELECT only; anon/PUBLIC none; NO client INSERT),
-  writes only via SECURITY DEFINER functions that derive actor/company server-side
-  (fixes forgeable actor_email/role/metadata). RLS enabled, NOT forced (analysed:
-  won't block DEFINER insert, adds no client-facing protection since clients have
-  no write grant). Indexes: (company_id,created_at desc),(entity_type,entity_id),
-  (actor_id),(created_at desc). Company-scoped active-staff-only read policy;
-  customers excluded. Runbook: `/app/supabase/PHASE9_0024_activity_log_owner_runbook.md`.
-- **0025_customer_portal_access.sql — REVISED & AUTHORED (was 0024; renamed for
-  dependency order).** Adds `customers.auth_user_id` (nullable FK + partial unique
-  index) and:
+  writes only via SECURITY DEFINER functions that derive actor/company server-side.
+  RLS enabled, NOT forced (analysed: won't block DEFINER insert). 4 indexes +
+  company-scoped active-staff read policy. Verified: table+FKs+NOT NULL+grants+RLS+
+  Security Advisor clean. Runbook: `PHASE9_0024_activity_log_owner_runbook.md`.
+- **0025_quarantine_legacy_portal_policies.sql — AUTHORED (owner to run FIRST,
+  before 0026).** Live-DB discovery (NOT repo-created): the original MoveOps
+  backend carries 13 RLS policies on customer_deposits/document_signatures/
+  documents/portal_activity/portal_tokens; 5 depend on the UNSAFE email-based
+  `current_customer_id()` (+ wrapper `is_current_customer(uuid)`). All LATENT (no
+  anon/authenticated/PUBLIC grants on those tables) but a re-exposure risk that
+  blocks resolver hardening. Migration DROPs (NO CASCADE) exactly the 5 policies +
+  the helper, defensively re-revokes client grants, preserves the 8 staff/manager
+  policies + postgres/service_role, and re-inventories resolver deps (must be ZERO).
+  Runbook: `PHASE9_0025_quarantine_owner_runbook.md`. Finding:
+  `PHASE9_legacy_portal_schema_finding.md`.
+- **0026_customer_portal_access.sql — REVISED & AUTHORED (was 0024→0025→0026).**
+  Adds `customers.auth_user_id` (nullable FK + partial unique index) and:
   - `_portal_current_customer_id()` internal resolver — auth.uid() ONLY (no email,
-    no LIMIT 1); requires active `customer` profile + non-null company matching the
-    customer's company; EXECUTE revoked from all clients.
-  - 6 read RPCs returning explicit `json_build_object` whitelists only:
-    `portal_list_quotes/get_quote`, `portal_list_jobs/get_job`,
-    `portal_list_invoices/get_invoice`. Drafts hidden; jobs exclude dispatch_notes/
-    crew/truck; payments exclude recorded_by. Lists paginate (limit clamp 1..100)
-    with deterministic order.
-  - `portal_approve_quote(uuid)` — reproduces authoritative 0015 acceptance
-    invariants (expiry guard + status-guarded atomic `UPDATE...RETURNING` on
-    sent/viewed + revoke outstanding approval tokens), row locked FOR UPDATE;
-    KEPT server-derived audit write to hardened activity_log in the SAME
-    transaction (actor_id=auth.uid(); company_id+actor_email from own customer
-    record; actor_role='customer'; no client-supplied identity).
+    no LIMIT 1); active `customer` profile + non-null matching company; no client EXECUTE.
+  - 6 explicit-`json_build_object` read RPCs (quotes/jobs/invoices list+detail);
+    drafts hidden; jobs exclude dispatch_notes/crew/truck; payments exclude recorded_by;
+    bounded pagination + deterministic order.
+  - `portal_approve_quote(uuid)` — reproduces 0015 acceptance invariants (expiry
+    guard + status-guarded atomic `UPDATE...RETURNING` + token revoke), row locked;
+    ATOMIC/FAIL-CLOSED audit write (no exception handler) to hardened activity_log;
+    identity from verified active profile (actor_role, company_id) + auth.users
+    (actor_email), never client/customers.email.
   - `portal_update_contact(...)` — customer edits only own name/email/phone.
-  - All 8 client RPCs: authenticated EXECUTE only; anon/PUBLIC none. NO staff RLS/
-    grant/business-logic changes. Legacy email-based `current_customer_id()` left
-    dormant/untouched; Part A3b/A3c inventory + Part F revoke-hardening (gated on
-    zero-dependency evidence, no drop).
-  - Runbook + column-exposure matrix + acceptance-dependency analysis + pos/neg
-    verification matrix + guarded Part D linking transaction + rollback + Security
-    Advisor step: `/app/supabase/PHASE9_0025_portal_owner_runbook.md`.
-- Preflight so far: portal Part A1 PASS (auth_user_id absent), A2 PASS for 8 base
-  tables, A2b confirmed activity_log ABSENT (→ 0024 authored). Remaining portal
-  A3/A3b/A3c/A4/A5/A6 pending owner.
+  - 8 client RPCs authenticated-EXECUTE only; anon/PUBLIC none. NO staff RLS/grant/
+    business-logic changes. Part F revoke-hardens legacy resolver AFTER 0025
+    quarantine makes deps zero (no drop). Runbook: `PHASE9_0026_portal_owner_runbook.md`.
+- Preflight/exec so far: 0024 Part A/B/C DONE. 0026 portal Part A1/A2/A2b PASS;
+  **A3 ABORTED** — surfaced the 5 legacy policies + is_current_customer → 0025
+  quarantine authored. Remaining 0026 Part A (A3–A6) to be re-run AFTER quarantine.
 - STATUS: awaiting owner approval + manual execution (author executes nothing).
-  No portal UI built yet (Phase 9 Priority 1 UI is the next step post-0025).
+  NO-GO on 0026 Part B until 0025 quarantine applied + Part D shows zero resolver
+  deps. No portal UI built yet.
