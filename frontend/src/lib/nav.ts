@@ -21,15 +21,15 @@ export interface NavItem {
 }
 
 export const STAFF_NAV: NavItem[] = [
-  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, roles: ["owner","operations_manager","manager","dispatcher","sales"] },
-  { label: "Leads", href: "/dashboard/leads", icon: Users, roles: ["owner","operations_manager","manager","sales"] },
-  { label: "Customers", href: "/dashboard/customers", icon: UserRound, roles: ["owner","operations_manager","manager","sales","dispatcher"] },
-  { label: "Quotes", href: "/dashboard/quotes", icon: FileText, roles: ["owner","operations_manager","manager","sales"] },
-  { label: "Jobs", href: "/dashboard/jobs", icon: Briefcase, roles: ["owner","operations_manager","manager","dispatcher"] },
-  { label: "Dispatch", href: "/dashboard/dispatch", icon: CalendarClock, roles: ["owner","operations_manager","manager","dispatcher"] },
-  { label: "Invoices", href: "/dashboard/invoices", icon: Receipt, roles: ["owner","operations_manager","manager","sales","dispatcher"] },
-  { label: "Reports", href: "/dashboard/reports", icon: BarChart3, roles: ["owner","operations_manager","manager"] },
-  { label: "Settings", href: "/dashboard/settings", icon: Settings, roles: ["owner","operations_manager","manager"] },
+  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, roles: ["owner","operations_manager","dispatcher","sales"] },
+  { label: "Leads", href: "/dashboard/leads", icon: Users, roles: ["owner","operations_manager","sales"] },
+  { label: "Customers", href: "/dashboard/customers", icon: UserRound, roles: ["owner","operations_manager","sales","dispatcher"] },
+  { label: "Quotes", href: "/dashboard/quotes", icon: FileText, roles: ["owner","operations_manager","sales"] },
+  { label: "Jobs", href: "/dashboard/jobs", icon: Briefcase, roles: ["owner","operations_manager","dispatcher"] },
+  { label: "Dispatch", href: "/dashboard/dispatch", icon: CalendarClock, roles: ["owner","operations_manager","dispatcher"] },
+  { label: "Invoices", href: "/dashboard/invoices", icon: Receipt, roles: ["owner","operations_manager","sales","dispatcher"] },
+  { label: "Reports", href: "/dashboard/reports", icon: BarChart3, roles: ["owner","operations_manager"] },
+  { label: "Settings", href: "/dashboard/settings", icon: Settings, roles: ["owner","operations_manager"] },
 ];
 
 // Filter staff nav by role. Unknown/absent role → show all (interim/demo).

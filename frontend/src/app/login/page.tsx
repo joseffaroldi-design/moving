@@ -15,9 +15,8 @@ import { BRAND } from "@/lib/brand";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { signIn, signUp } = useAuth();
+  const { signIn } = useAuth();
   const toast = useToast();
-  const [mode, setMode] = useState<"login" | "signup">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -28,20 +27,9 @@ export default function LoginPage() {
     setErr(null);
     setLoading(true);
     try {
-      if (mode === "login") {
-        const { role } = await signIn(email, password);
-        toast("Signed in successfully.", "success");
-        router.push(homeForRole(role));
-      } else {
-        const { needsConfirmation } = await signUp(email, password);
-        if (needsConfirmation) {
-          toast("Check your email to confirm your account.", "info");
-          setMode("login");
-        } else {
-          toast("Account created.", "success");
-          router.push("/dashboard");
-        }
-      }
+      const { role } = await signIn(email, password);
+      toast("Signed in successfully.", "success");
+      router.push(homeForRole(role));
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : "Authentication failed.");
     } finally {
@@ -60,12 +48,10 @@ export default function LoginPage() {
             Operations Portal
           </p>
           <h1 className="font-serif text-3xl font-bold text-navy">
-            {mode === "login" ? "Welcome back" : "Create your account"}
+            Welcome back
           </h1>
           <p className="mt-2 text-sm text-muted">
-            {mode === "login"
-              ? "Sign in to manage leads, quotes, jobs, and dispatch."
-              : "Set up the first owner account for your company."}
+            Sign in to manage leads, quotes, jobs, and dispatch.
           </p>
 
           <form onSubmit={onSubmit} className="mt-7 space-y-4">
@@ -85,21 +71,18 @@ export default function LoginPage() {
             <div>
               <div className="mb-1.5 flex items-center justify-between">
                 <Label htmlFor="password" className="mb-0">Password</Label>
-                {mode === "login" && (
-                  <Link href="/forgot-password" className="text-xs font-semibold text-gold-hover hover:underline">
-                    Forgot password?
-                  </Link>
-                )}
+                <Link href="/forgot-password" className="text-xs font-semibold text-gold-hover hover:underline">
+                  Forgot password?
+                </Link>
               </div>
               <Input
                 id="password"
                 type="password"
                 data-testid="login-password"
-                autoComplete={mode === "login" ? "current-password" : "new-password"}
+                autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                minLength={mode === "signup" ? 6 : undefined}
                 placeholder="••••••••"
               />
             </div>
@@ -111,24 +94,12 @@ export default function LoginPage() {
             )}
 
             <Button type="submit" variant="navy" className="w-full" size="lg" loading={loading} data-testid="login-submit">
-              {mode === "login" ? "Sign in" : "Create account"}
+              Sign in
             </Button>
           </form>
 
           <p className="mt-6 text-center text-sm text-muted">
-            {mode === "login" ? (
-              <>New here?{" "}
-                <button onClick={() => { setMode("signup"); setErr(null); }} className="font-semibold text-navy hover:text-gold-hover" data-testid="switch-to-signup">
-                  Create an account
-                </button>
-              </>
-            ) : (
-              <>Already have an account?{" "}
-                <button onClick={() => { setMode("login"); setErr(null); }} className="font-semibold text-navy hover:text-gold-hover" data-testid="switch-to-login">
-                  Sign in
-                </button>
-              </>
-            )}
+            Accounts are provisioned by your company administrator.
           </p>
         </div>
 
