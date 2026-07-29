@@ -505,3 +505,9 @@ RC1 migration files: /app/supabase/migrations/ (RC1_R2/R3/R5, 0018–0023, verif
   ⚠️ Authenticated multi-role/cross-company flows NOT auto-tested (no stored credentials, owner policy).
   Owner-executed runbook: /app/supabase/PHASE8_owner_test_runbook.md. Status doc: /app/memory/PHASE8_status.md.
 - NOT complete until owner returns Checkpoint 4 evidence.
+
+## Deployment target correction (2026-06)
+- Intended PRODUCTION target changed from Emergent to **Vercel** (Emergent standard deploy targets React+FastAPI+Mongo; Next.js 15 SSR support unconfirmed per support).
+- Blocker labels UNCHANGED by this hosting decision: RC1 COMPLETE; B1 CLOSED; B2 MITIGATED (documented platform-owned residual); B3 CLOSED.
+- Production approval remains NO pending: Vercel deployment prep + owner authorization + post-deploy production verification.
+- Vercel runbook: see PRC1 Checkpoint 3 audit (this session). No app/deploy/DB changes made during the audit.
