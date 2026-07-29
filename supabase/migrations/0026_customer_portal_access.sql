@@ -874,8 +874,8 @@ end $$;
 -- =====================================================================
 -- Drops the 9 functions + the unique index. Optionally drops the column
 -- (ONLY if you are certain no links exist / no data depends on it). Because
--- 0024 uses a NEW internal resolver name and adds NO base-table policies or
--- grants, this rollback restores the exact pre-0024 state — legacy
+-- 0026 uses a NEW internal resolver name and adds NO base-table policies or
+-- grants, this rollback restores the exact pre-0026 state — legacy
 -- public.current_customer_id(), all staff policies, and all table grants are
 -- untouched by both this migration AND this rollback.
 --
