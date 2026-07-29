@@ -46,7 +46,12 @@ Legacy invoice objects reconciled and new invoice schema/RPCs deployed and verif
   Assessment: likely NON-BREAKING today (dashboard reads via secured Edge Function/service_role;
   direct authenticated reads of these views are Phase 8, LOCKED). payroll_entries is sensitive -
   do NOT grant authenticated SELECT without confirming its RLS is company- AND role-scoped.
-  Open decision: (a) leave as-is, (b) grant after RLS-posture diagnostic, (c) other.
+  Open decision: RESOLVED (owner) -> access model = service_role ONLY (Edge Function path).
+  Do NOT broaden authenticated access to companies/payroll_entries.
+
+- **0023_b3_views_service_role_only.sql**: DRAFTED (grants-only; view defs + security_invoker preserved).
+  REVOKE ALL from anon/PUBLIC/authenticated; GRANT SELECT to service_role only.
+  No table/RLS/function/data/ownership change. verify_0023 (Grids A-C) authored. Owner-executed; NOT run yet.
 
 ## Current status
 B3: SCHEMA + RPCs VERIFIED (Step D PASS). Not fully closed until Step E views are rebuilt with
