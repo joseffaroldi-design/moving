@@ -1,6 +1,12 @@
 # RC1 — B1 (mvp-dashboard anonymous PII) — Owner Deployment & Verification Runbook
 
-**Status:** B1 OPEN — REMEDIATION STAGED, NOT DEPLOYED.
+**Status:** B1 CLOSED (owner-attested, 2026-06). Secure function deployed; owner executed
+authorization probes A–H (A/B + C invalid/expired/missing → 401; D customer → 403; E inactive →
+403 inactive_account; F no-company → 403 forbidden not 404; G owner positive → 200 own-company,
+no PII; H second-company staff → 200 own-company only, no cross-company data) and the Step-4 app
+smoke test. Probe evidence held by owner (JWTs not pasted into chat per boundary). RC1 COMPLETE.
+
+**(historical) Status:** B1 OPEN — REMEDIATION STAGED, NOT DEPLOYED.
 Agent cannot deploy Edge Functions or run authenticated sessions. All steps below
 are owner-executed. Do not paste raw JWTs/credentials into chat.
 

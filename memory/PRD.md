@@ -449,9 +449,13 @@ read-only verification JSON → then frontend/RPCs wired.
 ## RC1 — Production Readiness Engineering (2026-06, owner-executed SQL boundary)
 Strict boundary: agent authors SQL only; owner runs all DDL/verification in Supabase SQL Editor.
 Three critical blockers tracked. Status snapshot:
-- **B1 (mvp-dashboard anon exposure): PARTIAL.** Secured Edge Function deployed (strict JWT/
-  company-scoped); frontend token forwarding wired. Owner smoke test passed. Authorization probes
-  C–H deferred (need test creds). Runbook: /app/supabase/RC1_B1_owner_runbook.md.
+- **B1 (mvp-dashboard anon exposure): CLOSED (owner-attested, 2026-06).** Secured Edge Function
+  deployed (strict JWT/company-scoped); frontend token forwarding wired. Owner executed all
+  authorization probes A–H + Step-4 app smoke test: A/B + C (invalid/expired/missing) → 401;
+  D customer → 403 forbidden; E inactive → 403 inactive_account; F no-company → 403 (not 404);
+  G owner → 200 own-company, no PII; H second-company staff → 200 own-company only (no cross-company
+  data). Probe evidence held by owner (JWTs not pasted per boundary). Runbook:
+  /app/supabase/RC1_B1_owner_runbook.md.
 - **B2 (anon DB exposure): MITIGATED WITH DOCUMENTED PLATFORM RESIDUAL.** R2 pre-snapshot preserved
   (rc1_backup.grant_snapshot=588 rows/42 relations; default_priv_snapshot=48 rows). R3 emergency anon
   lockdown + R5 default-privileges fix applied (postgres-owned unsafe defaults removed, VERIFIED).
@@ -471,7 +475,11 @@ Three critical blockers tracked. Status snapshot:
     authenticated access to companies/payroll_entries intentionally NOT broadened.
 
 ### RC1 gate
-Production approval: NO. Phase 8 (Invoices & Payments feature work): LOCKED until owner authorizes.
-Remaining RC1 items: B1 authorization probes C–H (owner, needs creds); optional B2 supabase_admin
-residual via Supabase support (RC1_supabase_support_request.md); SSR prod-deploy platform limitation.
+**RC1 COMPLETE (2026-06)** — all three critical blockers closed (B1 owner-attested via probes A–H +
+smoke test; B2 mitigated with documented supabase_admin platform residual; B3 fully reconciled/
+secured). Production go/no-go and Phase 8 unlock remain the owner's explicit decision (not auto-
+changed by RC1 completion). As last set: Production approval NO, Phase 8 LOCKED — awaiting owner
+authorization to proceed to feature work.
+Optional follow-ups: B2 supabase_admin residual via Supabase support (RC1_supabase_support_request.md);
+SSR prod-deploy platform limitation (needs Node-server-capable deploy image).
 RC1 migration files: /app/supabase/migrations/ (RC1_R2/R3/R5, 0018–0023, verify_002x).
