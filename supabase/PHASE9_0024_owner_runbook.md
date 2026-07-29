@@ -124,14 +124,14 @@ one would require editing 0015 and re-verifying the token path — out of scope 
 this migration. Instead the invariants are reproduced verbatim and enumerated
 here for audit.
 
-**Scope addition flagged for approval (Requirement 9):** step (iv) writes ONE
-`activity_log` row for the approval, every field derived server-side
-(`actor_id = auth.uid()`, role hardcoded `'customer'`, no client-trusted
-identity). It is wrapped in a sub-block so a logging failure can never block the
-authoritative acceptance. Customers cannot read `activity_log` (staff-only read
-policy, 0003). This is the ONLY new write target beyond quotes/tokens. If you
-prefer strict parity with the token path (which does not log), delete block (iv)
-before running — acceptance is unaffected either way.
+**Scope decision (owner-approved, Requirement 1 & 9):** step (iv) writes ONE
+`activity_log` row for the approval **inside the same acceptance transaction**,
+every field derived server-side (`actor_id = auth.uid()`, role hardcoded
+`'customer'`, no client-supplied actor/customer/company identity). It is wrapped
+in a savepoint sub-block so a logging failure cannot roll back or block the
+authoritative acceptance, but on success it commits atomically with the status
+change. Customers cannot read `activity_log` (staff-only read policy, 0003).
+This block is **KEPT** (not optional) per owner decision.
 
 ---
 
@@ -158,10 +158,12 @@ resolver has no client grant. None accept a company_id or customer_id argument.
 ## 4. Owner runbook (Part A–E)
 
 1. **Part A (read-only preflight).** Run all of A1–A6. **Save A3's output** (prior
-   defs/policies) and the A5 + A6 snapshots. If A1 ≠ 0, if A2 is missing an
-   expected row, if A3 shows any pre-existing `portal_*`/`_portal_*` function or
-   `*_customer_self*`/`*portal*` policy, or if A4 is false → **STOP** and
-   reconcile; do not run Part B.
+   defs/policies), the A3b legacy-resolver owner/grant capture, the A3c legacy
+   dependency inventory (c1–c5), and the A5 + A6 snapshots. If A1 ≠ 0, if A2 is
+   missing an expected row, if A3 shows any pre-existing `portal_*`/`_portal_*`
+   function or `*_customer_self*`/`*portal*` policy, or if A4 is false → **STOP**
+   and reconcile; do not run Part B. A3c is the gate for Part F: revoke-harden
+   the legacy `current_customer_id()` only when c1–c5 all return zero rows.
 2. **Part B (migration).** Run the whole `begin … commit;` block once.
 3. **Part C (read-only verification).** Run C1–C9; paste results. Pass criteria:
    - C1 both true.
@@ -227,9 +229,13 @@ staff RPCs, and invoice/quote/job business logic are never affected by either
 the migration or the rollback. If any customer has already been linked and you
 drop the column, those links are lost (re-link via Part D after re-applying).
 
-`Part F` is an independent, optional hardening to remove the dormant legacy
-email-based `current_customer_id()` (non-executable since 0006); it is not
-required by the portal and has its own save-then-restore note.
+`Part F` is a **separate** legacy-resolver hardening step (run outside the Part B
+transaction). Per owner decision the dormant email-based
+`public.current_customer_id()` may not remain merely dormant: after the Part
+A3b/A3c evidence confirms nothing depends on it (c1–c5 all zero), Part F
+positively REVOKEs EXECUTE from PUBLIC/anon/authenticated. It does **not** drop
+the function — a drop is deferred to a future, separately-approved migration and
+only once the dependency inventory + saved definition make removal safe.
 
 ---
 

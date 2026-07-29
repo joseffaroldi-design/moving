@@ -57,11 +57,16 @@ where table_schema='public' and (
    or (table_name='activity_log'       and column_name in ('actor_id','actor_email','actor_role','action','entity_type','entity_id','summary','metadata')) )
 group by table_name order by table_name;
 
--- A3. CAPTURE + SAVE the exact prior definitions & grants of anything that
---     shares a name we use. If any UNEXPECTED object appears here (i.e. a
---     portal_* / _portal_* function or a *_customer_self_* policy already
---     exists), STOP and reconcile before Part B — do not blindly overwrite.
-select p.proname, pg_get_functiondef(p.oid) as definition
+-- A3. CAPTURE + SAVE the exact prior definitions of anything that shares a name
+--     we use. If any UNEXPECTED object appears here (i.e. a portal_* /
+--     _portal_* function OR a *_customer_self_*/*portal* policy already exists),
+--     STOP and reconcile before Part B — do not blindly overwrite.
+select p.proname,
+       pg_get_userbyid(p.proowner) as owner,
+       pg_get_function_identity_arguments(p.oid) as signature,
+       p.prosecdef as security_definer,
+       p.proconfig as config,
+       pg_get_functiondef(p.oid) as definition
 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
 where n.nspname='public'
   and p.proname in ('current_customer_id','_portal_current_customer_id',
@@ -70,11 +75,58 @@ where n.nspname='public'
                     'portal_approve_quote','portal_update_contact')
 order by p.proname;
 
-select tablename, policyname, cmd, roles, qual
+select tablename, policyname, cmd, roles, qual, with_check
 from pg_policies
 where schemaname='public'
   and (policyname ilike '%customer_self%' or policyname ilike '%portal%')
 order by tablename, policyname;
+
+-- A3b. LEGACY RESOLVER FOCUS — exact owner + full EXECUTE grants of the legacy
+--      email-based public.current_customer_id() (and, for contrast, the new
+--      internal name if it somehow already exists). Expect: legacy present with
+--      NO PUBLIC/anon/authenticated EXECUTE (revoked in 0006); new name absent.
+select n.nspname as schema, p.proname,
+       pg_get_userbyid(p.proowner) as owner,
+       pg_get_function_identity_arguments(p.oid) as signature,
+       coalesce(array_to_string(p.proacl, ' | '), '(default ACL = EXECUTE to PUBLIC)') as execute_acl
+from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+where n.nspname='public'
+  and p.proname in ('current_customer_id','_portal_current_customer_id')
+order by p.proname;
+
+-- A3c. LEGACY RESOLVER — COMPLETE DEPENDENCY INVENTORY. Removal/hardening of
+--      current_customer_id() is only safe if ALL of these return ZERO rows.
+--      (pg_depend does not record SQL/plpgsql body references, so we also text-
+--      search function bodies, RLS policy expressions, view/matview defs, and
+--      column defaults/constraints.)
+--   c1) hard catalog dependencies on the function object:
+select classid::regclass as dependent_catalog, objid, deptype
+from pg_depend
+where refobjid = (
+  select p.oid from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+  where n.nspname='public' and p.proname='current_customer_id'
+  order by p.oid limit 1)
+  and deptype not in ('i');   -- ignore internal
+--   c2) other function/procedure bodies referencing it by name:
+select p.proname, n.nspname
+from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+where p.proname <> 'current_customer_id'
+  and pg_get_functiondef(p.oid) ~* '\mcurrent_customer_id\M';
+--   c3) RLS policies referencing it (USING or WITH CHECK):
+select schemaname, tablename, policyname, cmd
+from pg_policies
+where coalesce(qual,'') ~* '\mcurrent_customer_id\M'
+   or coalesce(with_check,'') ~* '\mcurrent_customer_id\M';
+--   c4) views / matviews referencing it:
+select schemaname, viewname as relname, 'view' as kind from pg_views
+where definition ~* '\mcurrent_customer_id\M'
+union all
+select schemaname, matviewname, 'matview' from pg_matviews
+where definition ~* '\mcurrent_customer_id\M';
+--   c5) column defaults / check constraints referencing it (rare but possible):
+select conrelid::regclass as table, conname, pg_get_constraintdef(oid) as def
+from pg_constraint
+where pg_get_constraintdef(oid) ~* '\mcurrent_customer_id\M';
 
 -- A4. The role enum must contain 'customer' (this migration depends on it).
 select exists (
@@ -744,14 +796,35 @@ end $$;
 
 
 -- =====================================================================
--- PART F — OPTIONAL legacy-resolver hardening (independent of the portal)
+-- PART F — LEGACY-RESOLVER HARDENING (revoke EXECUTE; run separately from B)
 -- =====================================================================
--- The legacy public.current_customer_id() (email-based) is DORMANT and
--- NON-EXECUTABLE by every client since 0006. 0024 does NOT use, alter, or
--- rely on it. If you want to eliminate the dormant email-based function
--- entirely, FIRST save its definition from Part A3, then:
---   drop function if exists public.current_customer_id();
--- Reversal: re-run the saved Part A3 definition, then re-apply 0006's revokes:
---   revoke execute on function public.current_customer_id() from public, anon, authenticated;
--- Do NOT drop it if any object still depends on it (Part A3 output is empty of
--- dependents in this project, but re-confirm on your live DB before dropping).
+-- Policy decision (owner): the legacy email-based public.current_customer_id()
+-- may NOT remain merely "dormant" indefinitely. This step positively REVOKES
+-- EXECUTE from PUBLIC, anon, and authenticated (defense-in-depth; 0006 already
+-- revoked it, so this both re-asserts and makes the intent explicit). It does
+-- NOT drop the function.
+--
+-- GATE — run this ONLY after Part A3b/A3c evidence shows the function is safe to
+-- restrict, i.e. A3c queries c1–c5 ALL return ZERO rows (nothing depends on it).
+-- If any dependency exists, STOP: hardening the grants is still safe, but do NOT
+-- proceed to any future drop until each dependent is migrated off it.
+--
+-- Run as its own statement (NOT inside the Part B transaction):
+--   revoke execute on function public.current_customer_id() from public;
+--   revoke execute on function public.current_customer_id() from anon;
+--   revoke execute on function public.current_customer_id() from authenticated;
+--
+-- Verify (expect NO public/anon/authenticated EXECUTE rows):
+--   select coalesce(array_to_string(p.proacl,' | '),'(default ACL)') as acl
+--   from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+--   where n.nspname='public' and p.proname='current_customer_id';
+--
+-- DROP is intentionally NOT part of this step. Only after the A3c dependency
+-- inventory proves removal is safe (all zero) AND you have saved the exact
+-- definition from A3 for reversibility should a drop be considered in a later,
+-- separately-approved migration:
+--   -- drop function if exists public.current_customer_id();   -- deferred, not now
+--
+-- Reversal of the revokes (if ever needed): re-grant per the saved prior ACL
+-- captured in Part A3b.
+
