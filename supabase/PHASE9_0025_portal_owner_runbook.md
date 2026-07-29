@@ -127,19 +127,24 @@ one would require editing 0015 and re-verifying the token path — out of scope 
 this migration. Instead the invariants are reproduced verbatim and enumerated
 here for audit.
 
-**Scope decision (owner-approved).** Step (iv) writes ONE `activity_log` row for
-the approval **inside the same acceptance transaction**. Every identity/tenant
-field is derived server-side and cannot be forged by the client:
-`actor_id = auth.uid()`; `company_id` and `actor_email` from the caller's OWN
-`customers` record; `actor_role` hardcoded `'customer'`. Only the descriptive
-fields (`action='quote.approved'`, `entity_type='quote'`, `entity_id`, `summary`,
-`metadata`) are set by the trusted function body — the client supplies none of
-them (it calls `portal_approve_quote(quote_id)` only). It is wrapped in a
-savepoint sub-block so a logging failure cannot roll back or block the
-authoritative acceptance, but on success it commits atomically with the status
-change. Customers cannot read `activity_log` (company-scoped, staff-only read
-policy in `0024_activity_log_hardened.sql`). This block is **KEPT** per owner
-decision, and the target table is the hardened `activity_log` (dependency 0024).
+**Audit behavior (owner-approved: ATOMIC / FAIL-CLOSED).** Step (iv) writes ONE
+`activity_log` row for the approval **inside the same transaction as acceptance
+and token revocation, with NO exception handler**. The three effects —
+(ii) status→accepted, (iii) token revocation, (iv) audit insert — are atomic:
+either all three commit, or ANY failure rolls the entire operation back (a failed
+audit insert therefore prevents the quote status change and token revocation).
+Every identity/tenant field is derived server-side from the **verified active
+profile** and the **Auth user**, and cannot be forged by the client:
+`actor_id = auth.uid()`; `actor_role` and `company_id` from the caller's own
+active `public.profiles` row (**not** hardcoded); `actor_email` from
+`auth.users` (the authenticated Auth-user email, **not** the customer-editable
+`customers.email`). Only the descriptive fields (`action='quote.approved'`,
+`entity_type='quote'`, `entity_id`, `summary`, `metadata`) are set by the trusted
+function body — the client supplies none of them (it calls
+`portal_approve_quote(quote_id)` only). Customers cannot read `activity_log`
+(company-scoped, staff-only read policy in `0024_activity_log_hardened.sql`).
+Verified by C10 (no exception handler) and by the transactional fail-closed test
+(§5, T-FAILCLOSED).
 
 ---
 
@@ -173,7 +178,7 @@ resolver has no client grant. None accept a company_id or customer_id argument.
    and reconcile; do not run Part B. A3c is the gate for Part F: revoke-harden
    the legacy `current_customer_id()` only when c1–c5 all return zero rows.
 2. **Part B (migration).** Run the whole `begin … commit;` block once.
-3. **Part C (read-only verification).** Run C1–C9; paste results. Pass criteria:
+3. **Part C (read-only verification).** Run C1–C10; paste results. Pass criteria:
    - C1 both true.
    - C2 all 9 rows: `security_definer=t`, `config` contains `search_path=public, pg_temp`, owner is your DB owner.
    - C3 returns **0 rows**.
@@ -183,6 +188,8 @@ resolver has no client grant. None accept a company_id or customer_id argument.
    - C7 == Part A6 snapshot (grants unchanged).
    - C8 lists the 8 RPCs (or is empty on PG builds that don't record SQL-body deps — acceptable; rely on C3/C4 + negative tests).
    - C9 returns **0 rows**.
+   - C10: `has_exception_handler = false` AND `references_activity_log = true`
+     (proves the audit write is present and fail-closed — no handler can suppress it).
 4. **Part D (link one customer).** Edit the two UUIDs, run the guarded `DO`
    block. It aborts on any validation failure and updates exactly one row.
    Then, signed in as that user, `select public._portal_current_customer_id();`
@@ -207,7 +214,7 @@ and separately as a **staff** user and **anon**.
 | P2 | Linked customer | `portal_get_quote(own non-draft)` | Full whitelisted quote + line items |
 | P3 | Linked customer | `portal_list_jobs()` / `portal_get_job(own)` | Own jobs; **no** dispatch_notes/crew/truck fields present |
 | P4 | Linked customer | `portal_list_invoices()` / `portal_get_invoice(own non-draft)` | Own invoices + line items + payments; **no** recorded_by/company_id |
-| P5 | Linked customer | `portal_approve_quote(own 'sent'/'viewed')` | `{status:'accepted'}`; quote→accepted; accepted_at set; outstanding tokens revoked; exactly one `activity_log` row written (company_id + actor_email server-derived, actor_role='customer') |
+| P5 | Linked customer | `portal_approve_quote(own 'sent'/'viewed')` | `{status:'accepted'}`; quote→accepted; accepted_at set; outstanding tokens revoked; exactly one `activity_log` row written **atomically** (company_id + actor_role from active profile; actor_email from auth.users) |
 | P6 | Linked customer | `portal_update_contact('New','Name','e@x.com','555')` | `{updated:true}`; only name/email/phone changed |
 | N1 | Linked customer | `portal_get_quote(other customer's quote id)` | error `Quote not found` (no leak) |
 | N2 | Linked customer | `portal_get_quote(own **draft** quote id)` | error `Quote not found` (drafts hidden) |
@@ -220,6 +227,57 @@ and separately as a **staff** user and **anon**.
 | N9 | anon | any `portal_*` RPC | 401 / no EXECUTE |
 | N10 | Unlinked / inactive / wrong-company customer | any `portal_*` RPC | error `Not authorized as a customer` |
 | N11 | Two customers, one auth user (attempt) | Part D link | aborts (unique index + guard); 0 rows changed |
+
+### T-FAILCLOSED — transactional proof that a failed audit insert rolls back everything
+
+Prerequisites: `0024` + `0025` applied; one **linked** customer (Part D) who owns
+a quote in status `sent` or `viewed`. You need that customer's `auth.users.id`
+(`<AUTH_USER_ID>`) and the quote id (`<QUOTE_ID>`). Run in the SQL Editor.
+
+Step 1 — install a trigger that forces every `activity_log` insert to fail:
+```sql
+create or replace function public._t_block_audit() returns trigger
+  language plpgsql as $$ begin raise exception 'forced audit failure (test)'; end $$;
+create trigger _t_block_audit before insert on public.activity_log
+  for each row execute function public._t_block_audit();
+```
+
+Step 2 — record the pre-state (should show status sent/viewed and >=1 active token):
+```sql
+select q.id, q.status,
+  (select count(*) from public.quote_approval_tokens t
+     where t.quote_id = q.id and t.revoked_at is null and t.decided_at is null) as active_tokens
+from public.quotes q where q.id = '<QUOTE_ID>';
+```
+
+Step 3 — attempt approval AS the linked customer (impersonate via JWT claim).
+EXPECTED: the call ERRORS with `forced audit failure (test)`:
+```sql
+begin;
+  select set_config('request.jwt.claims',
+    json_build_object('sub','<AUTH_USER_ID>','role','authenticated')::text, true);
+  select public.portal_approve_quote('<QUOTE_ID>');   -- raises; aborts the txn
+rollback;
+```
+
+Step 4 — verify the post-state is IDENTICAL to Step 2 (status still sent/viewed,
+same active token count) — proving the accept + token revocation rolled back with
+the failed audit insert:
+```sql
+select q.id, q.status,
+  (select count(*) from public.quote_approval_tokens t
+     where t.quote_id = q.id and t.revoked_at is null and t.decided_at is null) as active_tokens
+from public.quotes q where q.id = '<QUOTE_ID>';
+```
+
+Step 5 — teardown (MANDATORY — restores normal logging):
+```sql
+drop trigger if exists _t_block_audit on public.activity_log;
+drop function if exists public._t_block_audit();
+```
+
+PASS = Step 3 errors AND Step 4 == Step 2. Then re-run P5 (with the trigger
+removed) to confirm a real approval succeeds and writes exactly one audit row.
 
 ---
 
@@ -263,8 +321,11 @@ only once the dependency inventory + saved definition make removal safe.
 7. ✅ `portal_approve_quote` reproduces 0015 invariants incl. token revocation,
    atomically; shared-internal reuse evaluated (none exists) and documented.
 8. ✅ Status-guarded atomic `UPDATE ... RETURNING`, exactly one eligible quote.
-9. ✅ Server-side audit log, all fields server-derived, wrapped, and flagged
-   here for approval (deletable block iv).
+9. ✅ Server-side audit log is **atomic & fail-closed** (no exception handler):
+   acceptance + token revocation + audit insert all commit together or all roll
+   back. Identity is derived from the verified active profile (`actor_role`,
+   `company_id`) and `auth.users` (`actor_email`), never the client or the
+   editable `customers.email`. Verified by C10 + T-FAILCLOSED.
 10. ✅ EXECUTE revoked from PUBLIC/anon on every function; authenticated granted
     only the 8 client RPCs.
 11. ✅ Part C verifies owner, signature, SECURITY DEFINER, pinned search_path,

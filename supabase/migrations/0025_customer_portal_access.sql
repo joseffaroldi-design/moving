@@ -500,16 +500,18 @@ grant execute on function public.portal_get_invoice(uuid) to authenticated;
 --     acceptance side-effects. The row is locked FOR UPDATE to serialise
 --     against a concurrent token-path decision.
 --
---     AUDIT (KEPT per owner decision): step (iv) writes ONE activity_log row in
---     THIS SAME transaction. Every identity/tenant field is derived server-side
---     — actor_id = auth.uid(); company_id + actor_email from the caller's own
---     customer record; actor_role hardcoded 'customer'. No client-supplied
+--     AUDIT (ATOMIC / FAIL-CLOSED per owner decision): step (iv) writes ONE
+--     activity_log row in THIS SAME transaction, with NO exception handler.
+--     Acceptance (ii), token revocation (iii), and the audit insert (iv) are
+--     therefore atomic: either all three commit, or ANY failure rolls the whole
+--     operation back. Every identity/tenant field is derived server-side from
+--     the VERIFIED active profile and the Auth user — actor_id = auth.uid();
+--     actor_role + company_id from the caller's own active public.profiles row
+--     (not hardcoded); actor_email from auth.users (the authenticated Auth-user
+--     email, NOT the customer-editable customers.email). No client-supplied
 --     actor/customer/company identity is trusted. Depends on
 --     0024_activity_log_hardened.sql (must be applied first). Customers cannot
---     READ activity_log (company-scoped, staff-only read policy). The insert is
---     wrapped in a savepoint sub-block so an unexpected logging failure cannot
---     roll back or block the authoritative acceptance, but on success it commits
---     atomically with the status change.
+--     READ activity_log (company-scoped, staff-only read policy).
 -- ---------------------------------------------------------------------
 create or replace function public.portal_approve_quote(p_quote_id uuid)
 returns json
@@ -524,6 +526,7 @@ declare
   v_updated uuid;
   v_number  text;
   v_email   text;
+  v_role    text;
   v_company uuid;
 begin
   if v_cust is null then raise exception 'Not authorized as a customer'; end if;
@@ -563,20 +566,27 @@ begin
      set revoked_at = now()
    where quote_id = p_quote_id and revoked_at is null and decided_at is null;
 
-  -- (iv) KEPT audit log — all identity/tenant fields derived server-side.
-  --      company_id + actor_email come from the caller's OWN customer record.
-  begin
-    select company_id, email into v_company, v_email
-    from public.customers where id = v_cust;
-    insert into public.activity_log
-      (company_id, actor_id, actor_email, actor_role, action, entity_type, entity_id, summary, metadata)
-    values
-      (v_company, auth.uid(), v_email, 'customer', 'quote.approved', 'quote', v_updated::text,
-       'Customer approved quote ' || coalesce(v_number, v_updated::text) || ' via portal',
-       jsonb_build_object('source','portal','customer_id', v_cust));
-  exception when others then
-    null; -- never block the acceptance on a logging failure
-  end;
+  -- (iv) audit log — ATOMIC & FAIL-CLOSED (NO exception handler). Identity/tenant
+  --      fields come from the VERIFIED active profile + the Auth user, not the
+  --      client and not the editable customers.email. Any failure here rolls back
+  --      (ii) and (iii) with it.
+  select p.role::text, p.company_id, u.email
+    into v_role, v_company, v_email
+  from public.profiles p
+  join auth.users u on u.id = p.id
+  where p.id = auth.uid()
+    and p.is_active is true;
+
+  if v_company is null then
+    raise exception 'Audit identity could not be resolved for the current user';
+  end if;
+
+  insert into public.activity_log
+    (company_id, actor_id, actor_email, actor_role, action, entity_type, entity_id, summary, metadata)
+  values
+    (v_company, auth.uid(), v_email, v_role, 'quote.approved', 'quote', v_updated::text,
+     'Customer approved quote ' || coalesce(v_number, v_updated::text) || ' via portal',
+     jsonb_build_object('source','portal','customer_id', v_cust));
 
   return json_build_object('quote_id', v_updated, 'status', 'accepted');
 end;
@@ -710,6 +720,17 @@ select auth_user_id, count(*) as n
 from public.customers
 where auth_user_id is not null
 group by auth_user_id having count(*) > 1;
+
+-- C10. FAIL-CLOSED audit: portal_approve_quote must contain NO exception handler
+--      that could suppress an audit failure. `has_exception_handler` must be
+--      FALSE. (This matches a PL/pgSQL handler block `EXCEPTION WHEN ...`; it does
+--      NOT match `RAISE EXCEPTION` guards, which are expected and fine.)
+--      `references_activity_log` must be TRUE (the audit insert is present).
+select p.proname,
+       (pg_get_functiondef(p.oid) ~* 'exception[[:space:]]+when') as has_exception_handler,
+       (pg_get_functiondef(p.oid) ~* 'insert into[[:space:]]+(public\.)?activity_log') as references_activity_log
+from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+where n.nspname='public' and p.proname='portal_approve_quote';
 
 
 -- =====================================================================
