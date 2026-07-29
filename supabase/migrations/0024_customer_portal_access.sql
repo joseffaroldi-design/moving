@@ -1,87 +1,128 @@
 -- =====================================================================
--- 0024_customer_portal_access.sql        [Phase 9 — Customer Portal foundation]
--- OWNER-EXECUTED ONLY. Author does NOT run this. Additive & security-focused.
+-- 0024_customer_portal_access.sql   [Phase 9 — Customer Portal foundation]
+-- OWNER-EXECUTED ONLY. The author does NOT run this. Additive & security-focused.
 --
--- Establishes a SECURE link between an authenticated user and ONE customer
--- record, and grants customers read access to ONLY their own quotes / jobs /
--- invoices / payments, plus two ownership-scoped RPCs (approve quote, update
--- contact). Email-based / LIMIT-1 identity resolution is explicitly avoided.
+-- ARCHITECTURE (approved 2026-06): EXPLICIT-FIELD READ RPCs.
+--   Customers NEVER get a base-table SELECT policy. All portal reads flow
+--   through SECURITY DEFINER RPCs that return an explicit, whitelisted set of
+--   customer-safe fields as JSON. This prevents the Data API from exposing any
+--   internal/staff/financial column (RLS filters ROWS, not COLUMNS).
 --
--- DOES NOT: touch staff RLS policies, existing invoice/quote/job/staff RPCs,
--- auth, or any financial/status logic. anon & PUBLIC receive nothing.
+-- WHAT THIS DOES
+--   * Adds customers.auth_user_id (nullable link to auth.users) + unique index.
+--   * Adds an internal auth-UID-only identity resolver (NO email, NO LIMIT 1).
+--   * Adds 6 read RPCs (quotes/jobs/invoices list+detail) — explicit JSON only.
+--   * Adds portal_approve_quote — reproduces the authoritative 0015 acceptance
+--     invariants (expiry guard + status-guarded atomic accept + token revoke)
+--     in ONE transaction, plus an OPTIONAL, server-derived audit-log write.
+--   * Adds portal_update_contact — customer edits ONLY their own name/email/phone.
 --
--- Run order: Part A (read-only) -> review -> Part B -> Part C (read-only) ->
--- Part D (owner links a specific customer<->user by explicit IDs). Part E is
--- the rollback if ever needed.
+-- WHAT THIS DOES NOT DO
+--   * Does NOT add/alter/drop any staff RLS policy.
+--   * Does NOT change table grants on the 7 base tables.
+--   * Does NOT touch existing invoice/quote/job RPCs, Edge Functions, or the
+--     legacy email-based public.current_customer_id() (dormant + non-executable
+--     since 0006; see Part A / optional note).
+--   * anon & PUBLIC receive nothing.
+--
+-- RUN ORDER: Part A (read-only preflight; PASTE RESULTS + SAVE A3 output)
+--   -> review -> Part B (migration) -> Part C (read-only verification)
+--   -> Part D (owner links ONE customer<->user by explicit IDs) -> done.
+--   Part E is the rollback. Part F is an OPTIONAL legacy-resolver hardening.
 -- =====================================================================
 
 
 -- =====================================================================
--- PART A — PREFLIGHT DIAGNOSTICS (READ-ONLY; run first, paste results)
+-- PART A — PREFLIGHT (READ-ONLY; run first, paste every result)
 -- =====================================================================
 
--- A1. Does customers.auth_user_id already exist? (expect 0 before, i.e. not yet)
+-- A1. auth_user_id must NOT exist yet (expect 0).
 select count(*) as auth_user_id_col_exists
 from information_schema.columns
 where table_schema='public' and table_name='customers' and column_name='auth_user_id';
 
--- A2. Confirm the columns this migration depends on actually exist.
+-- A2. Confirm every column this migration reads/writes actually exists.
+--     (If any expected row is missing, STOP — do not run Part B.)
 select table_name, string_agg(column_name, ', ' order by ordinal_position) as cols
 from information_schema.columns
-where table_schema='public'
-  and ( (table_name='customers' and column_name in ('id','company_id','first_name','last_name','email','phone'))
-     or (table_name='profiles'  and column_name in ('id','company_id','role','is_active'))
-     or (table_name='quotes'    and column_name in ('id','company_id','customer_id','status','accepted_at','updated_at'))
-     or (table_name='jobs'      and column_name in ('id','company_id','customer_id'))
-     or (table_name='invoices'  and column_name in ('id','company_id','customer_id','status')) )
+where table_schema='public' and (
+      (table_name='customers'          and column_name in ('id','company_id','first_name','last_name','email','phone'))
+   or (table_name='profiles'           and column_name in ('id','company_id','role','is_active'))
+   or (table_name='quotes'             and column_name in ('id','company_id','customer_id','quote_number','status','created_at','expires_at','accepted_at','updated_at','hourly_rate','estimated_hours','travel_fee','packing_fee','materials_fee','discount','subtotal','tax_rate','tax','total','deposit_percent','deposit_amount'))
+   or (table_name='quote_line_items'   and column_name in ('id','quote_id','description','quantity','unit_price','total','sort_order'))
+   or (table_name='jobs'               and column_name in ('id','company_id','customer_id','job_number','status','scheduled_start','scheduled_end','origin_address','destination_address'))
+   or (table_name='invoices'           and column_name in ('id','company_id','customer_id','invoice_number','status','subtotal','tax_rate','tax','total','amount_paid','balance','notes','due_date','sent_at'))
+   or (table_name='invoice_line_items' and column_name in ('id','invoice_id','description','quantity','unit_price','total','sort_order'))
+   or (table_name='invoice_payments'   and column_name in ('id','invoice_id','amount','method','paid_at','note'))
+   or (table_name='activity_log'       and column_name in ('actor_id','actor_email','actor_role','action','entity_type','entity_id','summary','metadata')) )
 group by table_name order by table_name;
 
--- A3. Existing functions that must not be broken / that we replace.
-select p.proname, pg_get_userbyid(p.proowner) as owner, p.prosecdef as security_definer
+-- A3. CAPTURE + SAVE the exact prior definitions & grants of anything that
+--     shares a name we use. If any UNEXPECTED object appears here (i.e. a
+--     portal_* / _portal_* function or a *_customer_self_* policy already
+--     exists), STOP and reconcile before Part B — do not blindly overwrite.
+select p.proname, pg_get_functiondef(p.oid) as definition
 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
 where n.nspname='public'
-  and p.proname in ('current_customer_id','portal_approve_quote','portal_update_contact','has_company_role')
+  and p.proname in ('current_customer_id','_portal_current_customer_id',
+                    'portal_list_quotes','portal_get_quote','portal_list_jobs',
+                    'portal_get_job','portal_list_invoices','portal_get_invoice',
+                    'portal_approve_quote','portal_update_contact')
 order by p.proname;
 
--- A4. Any lingering email-based customer resolver? (expect none)
-select p.proname
-from pg_proc p join pg_namespace n on n.oid=p.pronamespace
-where n.nspname='public' and p.proname in ('current_customer_id')
-  and pg_get_functiondef(p.oid) ~* 'email';
+select tablename, policyname, cmd, roles, qual
+from pg_policies
+where schemaname='public'
+  and (policyname ilike '%customer_self%' or policyname ilike '%portal%')
+order by tablename, policyname;
 
--- A5. Existing STAFF policies on target tables that MUST remain untouched.
+-- A4. The role enum must contain 'customer' (this migration depends on it).
+select exists (
+  select 1 from pg_enum e join pg_type t on t.oid=e.enumtypid
+  where t.typname='user_role' and e.enumlabel='customer') as customer_role_exists;
+
+-- A5. Snapshot the EXISTING staff policies on the 7 target tables. Save this;
+--     Part C6 must return an identical set (proves staff RLS was untouched).
 select tablename, policyname, cmd, roles
 from pg_policies
 where schemaname='public'
   and tablename in ('customers','quotes','quote_line_items','jobs','invoices','invoice_line_items','invoice_payments')
 order by tablename, policyname;
 
--- A6. Current quote status values in use (informs the approvable-state guard).
-select status, count(*) from public.quotes group by status order by 1;
-
--- A7. Any duplicate/conflicting future auth links? (expect 0 now; also run in Part C)
-select 1 where exists (
-  select 1 from information_schema.columns
-  where table_schema='public' and table_name='customers' and column_name='auth_user_id');
+-- A6. Snapshot base-table grants for anon/authenticated/public. Save this;
+--     Part C7 must return an identical set (proves grants were untouched).
+select table_name, grantee, privilege_type
+from information_schema.role_table_grants
+where table_schema='public'
+  and table_name in ('customers','quotes','quote_line_items','jobs','invoices','invoice_line_items','invoice_payments')
+  and grantee in ('anon','authenticated','public','PUBLIC')
+order by table_name, grantee, privilege_type;
 
 
 -- =====================================================================
--- PART B — MIGRATION (transactional; idempotent where practical)
+-- PART B — MIGRATION (single transaction)
 -- =====================================================================
 begin;
 
--- B1. Secure link column (nullable; staff attach a portal login later).
+-- ---------------------------------------------------------------------
+-- B1. Secure link column + uniqueness (one auth user -> at most one customer).
+-- ---------------------------------------------------------------------
 alter table public.customers
   add column if not exists auth_user_id uuid references auth.users(id) on delete set null;
 
--- B2. Uniqueness: one auth user may link to at most ONE customer record.
 create unique index if not exists customers_auth_user_id_unique
   on public.customers(auth_user_id)
   where auth_user_id is not null;
 
--- B3. Secure identity resolver — keyed on auth.uid() ONLY (no email, no guess).
---     Uniqueness (B2) guarantees at most one row, so no LIMIT is needed.
-create or replace function public.current_customer_id()
+-- ---------------------------------------------------------------------
+-- B2. Internal identity resolver — auth.uid() ONLY (no email, no LIMIT 1).
+--     Verifies: caller present, active 'customer' profile, non-null company,
+--     customer.company_id == profile.company_id. Uniqueness (B1) guarantees
+--     at most one matching customer row, so no LIMIT is required.
+--     Internal-only: EXECUTE revoked from every client. Portal RPCs (DEFINER)
+--     call it as the definer; clients never call it directly.
+-- ---------------------------------------------------------------------
+create or replace function public._portal_current_customer_id()
 returns uuid
 language sql
 stable
@@ -92,75 +133,321 @@ as $$
   from public.customers c
   join public.profiles p on p.id = auth.uid()
   where c.auth_user_id = auth.uid()
-    and p.role = 'customer'::public.user_role
-    and p.is_active = true
+    and p.role::text = 'customer'
+    and p.is_active is true
+    and p.company_id is not null
     and c.company_id = p.company_id
 $$;
 
-revoke all on function public.current_customer_id() from public, anon;
-grant execute on function public.current_customer_id() to authenticated;
+revoke all on function public._portal_current_customer_id() from public, anon, authenticated;
 
--- B4. CUSTOMER-SELF SELECT policies (own rows only). Staff policies untouched;
---     these are ADDED (permissive OR). For staff users current_customer_id()
---     is NULL, so these policies match no extra rows.
+-- ---------------------------------------------------------------------
+-- B3. READ RPC — list the caller's own quotes (non-draft). Explicit fields.
+--     Bounded limit (1..100), deterministic order (created_at desc, id desc).
+-- ---------------------------------------------------------------------
+create or replace function public.portal_list_quotes(
+  p_limit  integer default 20,
+  p_offset integer default 0
+)
+returns json
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_cust  uuid := public._portal_current_customer_id();
+  v_lim   integer := least(greatest(coalesce(p_limit, 20), 1), 100);
+  v_off   integer := greatest(coalesce(p_offset, 0), 0);
+  v_items json;
+  v_count bigint;
+begin
+  if v_cust is null then raise exception 'Not authorized as a customer'; end if;
 
--- customers: only the caller's own linked record.
-drop policy if exists "customers_customer_self_select" on public.customers;
-create policy "customers_customer_self_select" on public.customers
-  for select to authenticated
-  using ( id = public.current_customer_id() );
+  select count(*) into v_count
+  from public.quotes q
+  where q.customer_id = v_cust and q.status::text <> 'draft';
 
--- quotes: own, and not a draft (drafts are staff-internal).
-drop policy if exists "quotes_customer_self_select" on public.quotes;
-create policy "quotes_customer_self_select" on public.quotes
-  for select to authenticated
-  using ( customer_id = public.current_customer_id()
-          and status <> 'draft'::public.quote_status );
+  select coalesce(json_agg(json_build_object(
+           'id', q.id, 'quote_number', q.quote_number, 'status', q.status,
+           'created_at', q.created_at, 'expires_at', q.expires_at,
+           'total', q.total, 'deposit_amount', q.deposit_amount)
+           order by q.created_at desc, q.id desc), '[]'::json)
+    into v_items
+  from (
+    select q.id, q.quote_number, q.status::text as status,
+           q.created_at, q.expires_at, q.total, q.deposit_amount
+    from public.quotes q
+    where q.customer_id = v_cust and q.status::text <> 'draft'
+    order by q.created_at desc, q.id desc
+    limit v_lim offset v_off
+  ) q;
 
--- quote_line_items: via an owned, non-draft quote.
-drop policy if exists "quote_line_items_customer_self_select" on public.quote_line_items;
-create policy "quote_line_items_customer_self_select" on public.quote_line_items
-  for select to authenticated
-  using ( exists (
-    select 1 from public.quotes q
-    where q.id = quote_line_items.quote_id
-      and q.customer_id = public.current_customer_id()
-      and q.status <> 'draft'::public.quote_status ) );
+  return json_build_object('items', v_items, 'count', v_count, 'limit', v_lim, 'offset', v_off);
+end;
+$$;
 
--- jobs: own.
-drop policy if exists "jobs_customer_self_select" on public.jobs;
-create policy "jobs_customer_self_select" on public.jobs
-  for select to authenticated
-  using ( customer_id = public.current_customer_id() );
+revoke all on function public.portal_list_quotes(integer, integer) from public, anon;
+grant execute on function public.portal_list_quotes(integer, integer) to authenticated;
 
--- invoices: own, and not a draft (drafts are staff-internal).
-drop policy if exists "invoices_customer_self_select" on public.invoices;
-create policy "invoices_customer_self_select" on public.invoices
-  for select to authenticated
-  using ( customer_id = public.current_customer_id()
-          and status <> 'draft'::public.invoice_status );
+-- ---------------------------------------------------------------------
+-- B4. READ RPC — one owned, non-draft quote + its line items. Explicit fields.
+-- ---------------------------------------------------------------------
+create or replace function public.portal_get_quote(p_quote_id uuid)
+returns json
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_cust  uuid := public._portal_current_customer_id();
+  q       record;
+  v_items json;
+begin
+  if v_cust is null then raise exception 'Not authorized as a customer'; end if;
 
--- invoice_line_items: via an owned, non-draft invoice.
-drop policy if exists "invoice_line_items_customer_self_select" on public.invoice_line_items;
-create policy "invoice_line_items_customer_self_select" on public.invoice_line_items
-  for select to authenticated
-  using ( exists (
-    select 1 from public.invoices i
-    where i.id = invoice_line_items.invoice_id
-      and i.customer_id = public.current_customer_id()
-      and i.status <> 'draft'::public.invoice_status ) );
+  select id, quote_number, status, created_at, expires_at, accepted_at,
+         hourly_rate, estimated_hours, travel_fee, packing_fee, materials_fee,
+         discount, subtotal, tax_rate, tax, total, deposit_percent, deposit_amount
+    into q
+  from public.quotes
+  where id = p_quote_id and customer_id = v_cust and status::text <> 'draft';
 
--- invoice_payments: payments on the caller's own non-draft invoices.
-drop policy if exists "invoice_payments_customer_self_select" on public.invoice_payments;
-create policy "invoice_payments_customer_self_select" on public.invoice_payments
-  for select to authenticated
-  using ( exists (
-    select 1 from public.invoices i
-    where i.id = invoice_payments.invoice_id
-      and i.customer_id = public.current_customer_id()
-      and i.status <> 'draft'::public.invoice_status ) );
+  if not found then raise exception 'Quote not found'; end if;
 
--- B5. RPC: customer approves ONE of their own quotes in an approvable state.
+  select coalesce(json_agg(json_build_object(
+           'description', li.description, 'quantity', li.quantity,
+           'unit_price', li.unit_price, 'total', li.total, 'sort_order', li.sort_order)
+           order by li.sort_order), '[]'::json)
+    into v_items
+  from public.quote_line_items li
+  where li.quote_id = q.id;
+
+  return json_build_object(
+    'id', q.id, 'quote_number', q.quote_number, 'status', q.status::text,
+    'created_at', q.created_at, 'expires_at', q.expires_at, 'accepted_at', q.accepted_at,
+    'hourly_rate', q.hourly_rate, 'estimated_hours', q.estimated_hours,
+    'travel_fee', q.travel_fee, 'packing_fee', q.packing_fee,
+    'materials_fee', q.materials_fee, 'discount', q.discount,
+    'subtotal', q.subtotal, 'tax_rate', q.tax_rate, 'tax', q.tax,
+    'total', q.total, 'deposit_percent', q.deposit_percent,
+    'deposit_amount', q.deposit_amount, 'line_items', v_items
+  );
+end;
+$$;
+
+revoke all on function public.portal_get_quote(uuid) from public, anon;
+grant execute on function public.portal_get_quote(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------
+-- B5. READ RPC — list the caller's own jobs. Explicit fields (NO dispatch_notes,
+--     NO created_by, NO crew/truck counts, NO company_id). Deterministic order.
+-- ---------------------------------------------------------------------
+create or replace function public.portal_list_jobs(
+  p_limit  integer default 20,
+  p_offset integer default 0
+)
+returns json
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_cust  uuid := public._portal_current_customer_id();
+  v_lim   integer := least(greatest(coalesce(p_limit, 20), 1), 100);
+  v_off   integer := greatest(coalesce(p_offset, 0), 0);
+  v_items json;
+  v_count bigint;
+begin
+  if v_cust is null then raise exception 'Not authorized as a customer'; end if;
+
+  select count(*) into v_count from public.jobs j where j.customer_id = v_cust;
+
+  select coalesce(json_agg(json_build_object(
+           'id', j.id, 'job_number', j.job_number, 'status', j.status,
+           'scheduled_start', j.scheduled_start, 'scheduled_end', j.scheduled_end,
+           'origin_address', j.origin_address, 'destination_address', j.destination_address)
+           order by j.scheduled_start desc nulls last, j.id desc), '[]'::json)
+    into v_items
+  from (
+    select j.id, j.job_number, j.status::text as status,
+           j.scheduled_start, j.scheduled_end, j.origin_address, j.destination_address
+    from public.jobs j
+    where j.customer_id = v_cust
+    order by j.scheduled_start desc nulls last, j.id desc
+    limit v_lim offset v_off
+  ) j;
+
+  return json_build_object('items', v_items, 'count', v_count, 'limit', v_lim, 'offset', v_off);
+end;
+$$;
+
+revoke all on function public.portal_list_jobs(integer, integer) from public, anon;
+grant execute on function public.portal_list_jobs(integer, integer) to authenticated;
+
+-- ---------------------------------------------------------------------
+-- B6. READ RPC — one owned job. Explicit customer-safe fields only.
+-- ---------------------------------------------------------------------
+create or replace function public.portal_get_job(p_job_id uuid)
+returns json
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_cust uuid := public._portal_current_customer_id();
+  j      record;
+begin
+  if v_cust is null then raise exception 'Not authorized as a customer'; end if;
+
+  select id, job_number, status, scheduled_start, scheduled_end,
+         origin_address, destination_address
+    into j
+  from public.jobs
+  where id = p_job_id and customer_id = v_cust;
+
+  if not found then raise exception 'Job not found'; end if;
+
+  return json_build_object(
+    'id', j.id, 'job_number', j.job_number, 'status', j.status::text,
+    'scheduled_start', j.scheduled_start, 'scheduled_end', j.scheduled_end,
+    'origin_address', j.origin_address, 'destination_address', j.destination_address
+  );
+end;
+$$;
+
+revoke all on function public.portal_get_job(uuid) from public, anon;
+grant execute on function public.portal_get_job(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------
+-- B7. READ RPC — list the caller's own invoices (non-draft). Explicit fields.
+-- ---------------------------------------------------------------------
+create or replace function public.portal_list_invoices(
+  p_limit  integer default 20,
+  p_offset integer default 0
+)
+returns json
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_cust  uuid := public._portal_current_customer_id();
+  v_lim   integer := least(greatest(coalesce(p_limit, 20), 1), 100);
+  v_off   integer := greatest(coalesce(p_offset, 0), 0);
+  v_items json;
+  v_count bigint;
+begin
+  if v_cust is null then raise exception 'Not authorized as a customer'; end if;
+
+  select count(*) into v_count
+  from public.invoices i
+  where i.customer_id = v_cust and i.status::text <> 'draft';
+
+  select coalesce(json_agg(json_build_object(
+           'id', i.id, 'invoice_number', i.invoice_number, 'status', i.status,
+           'total', i.total, 'amount_paid', i.amount_paid, 'balance', i.balance,
+           'due_date', i.due_date, 'sent_at', i.sent_at)
+           order by i.sent_at desc nulls last, i.id desc), '[]'::json)
+    into v_items
+  from (
+    select i.id, i.invoice_number, i.status::text as status,
+           i.total, i.amount_paid, i.balance, i.due_date, i.sent_at
+    from public.invoices i
+    where i.customer_id = v_cust and i.status::text <> 'draft'
+    order by i.sent_at desc nulls last, i.id desc
+    limit v_lim offset v_off
+  ) i;
+
+  return json_build_object('items', v_items, 'count', v_count, 'limit', v_lim, 'offset', v_off);
+end;
+$$;
+
+revoke all on function public.portal_list_invoices(integer, integer) from public, anon;
+grant execute on function public.portal_list_invoices(integer, integer) to authenticated;
+
+-- ---------------------------------------------------------------------
+-- B8. READ RPC — one owned, non-draft invoice + line items + payments.
+--     Explicit fields (NO created_by, NO recorded_by, NO company_id).
+-- ---------------------------------------------------------------------
+create or replace function public.portal_get_invoice(p_invoice_id uuid)
+returns json
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_cust    uuid := public._portal_current_customer_id();
+  i         record;
+  v_items   json;
+  v_pays    json;
+begin
+  if v_cust is null then raise exception 'Not authorized as a customer'; end if;
+
+  select id, invoice_number, status, subtotal, tax_rate, tax, total,
+         amount_paid, balance, notes, due_date, sent_at
+    into i
+  from public.invoices
+  where id = p_invoice_id and customer_id = v_cust and status::text <> 'draft';
+
+  if not found then raise exception 'Invoice not found'; end if;
+
+  select coalesce(json_agg(json_build_object(
+           'description', li.description, 'quantity', li.quantity,
+           'unit_price', li.unit_price, 'total', li.total, 'sort_order', li.sort_order)
+           order by li.sort_order), '[]'::json)
+    into v_items
+  from public.invoice_line_items li
+  where li.invoice_id = i.id;
+
+  select coalesce(json_agg(json_build_object(
+           'amount', p.amount, 'method', p.method, 'paid_at', p.paid_at, 'note', p.note)
+           order by p.paid_at desc), '[]'::json)
+    into v_pays
+  from public.invoice_payments p
+  where p.invoice_id = i.id;
+
+  return json_build_object(
+    'id', i.id, 'invoice_number', i.invoice_number, 'status', i.status::text,
+    'subtotal', i.subtotal, 'tax_rate', i.tax_rate, 'tax', i.tax, 'total', i.total,
+    'amount_paid', i.amount_paid, 'balance', i.balance, 'notes', i.notes,
+    'due_date', i.due_date, 'sent_at', i.sent_at,
+    'line_items', v_items, 'payments', v_pays
+  );
+end;
+$$;
+
+revoke all on function public.portal_get_invoice(uuid) from public, anon;
+grant execute on function public.portal_get_invoice(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------
+-- B9. WRITE RPC — customer approves ONE of their own quotes.
+--     Reproduces the authoritative 0015 respond_to_quote_approval invariants
+--     for an 'accept' decision, atomically:
+--       (i)   expiry guard: an expired-by-date quote auto-flips to 'expired'
+--             and CANNOT be accepted (mirrors 0015).
+--       (ii)  status-guarded atomic UPDATE ... RETURNING: succeeds for exactly
+--             one quote whose status is 'sent' or 'viewed'.
+--       (iii) revoke all outstanding active approval tokens for the quote
+--             (mirrors 0015's "revoke the other tokens" cleanup).
+--     NOTE: quotes has no triggers and the activity log is not trigger-driven
+--     (verified against 0003/0014/0015), so (i)-(iii) are the complete set of
+--     acceptance side-effects. The row is locked FOR UPDATE to serialise
+--     against a concurrent token-path decision.
+--
+--     SCOPE NOTE (audit): step (iv) writes ONE activity_log row with every
+--     field derived server-side (actor_id = auth.uid(), role hardcoded
+--     'customer', no client-trusted identity). It is wrapped so a logging
+--     hiccup can never block the authoritative acceptance. Customers cannot
+--     READ activity_log (staff-only read policy, 0003). If you prefer to keep
+--     portal parity with the token path (which does NOT log), delete block (iv)
+--     before running — the acceptance itself is unaffected.
+-- ---------------------------------------------------------------------
 create or replace function public.portal_approve_quote(p_quote_id uuid)
 returns json
 language plpgsql
@@ -168,41 +455,75 @@ security definer
 set search_path = public, pg_temp
 as $$
 declare
-  v_cust uuid := public.current_customer_id();
-  v_status public.quote_status;
+  v_cust    uuid := public._portal_current_customer_id();
+  v_status  text;
+  v_expires timestamptz;
+  v_updated uuid;
+  v_number  text;
+  v_email   text;
 begin
-  if v_cust is null then
-    raise exception 'Not authorized as a customer';
-  end if;
+  if v_cust is null then raise exception 'Not authorized as a customer'; end if;
 
-  select status into v_status
+  -- lock the row; also fetch current status/expiry
+  select status::text, expires_at into v_status, v_expires
   from public.quotes
-  where id = p_quote_id and customer_id = v_cust;
+  where id = p_quote_id and customer_id = v_cust
+  for update;
 
-  if not found then
-    raise exception 'Quote not found';
+  if not found then raise exception 'Quote not found'; end if;
+
+  -- (i) expiry guard — mirrors 0015
+  if v_expires is not null and v_expires <= now() then
+    update public.quotes
+       set status = 'expired'::public.quote_status, updated_at = now()
+     where id = p_quote_id and customer_id = v_cust
+       and status::text in ('sent','viewed');
+    raise exception 'This quote has expired';
   end if;
 
-  if v_status not in ('sent'::public.quote_status, 'viewed'::public.quote_status) then
-    raise exception 'This quote is not in an approvable state (current status: %)', v_status;
-  end if;
-
+  -- (ii) status-guarded atomic accept
   update public.quotes
      set status = 'accepted'::public.quote_status,
          accepted_at = now(),
          updated_at = now()
-   where id = p_quote_id and customer_id = v_cust;
+   where id = p_quote_id and customer_id = v_cust
+     and status::text in ('sent','viewed')
+  returning id, quote_number into v_updated, v_number;
 
-  return json_build_object('quote_id', p_quote_id, 'status', 'accepted');
+  if v_updated is null then
+    raise exception 'This quote is not awaiting a decision (current status: %)', v_status;
+  end if;
+
+  -- (iii) revoke outstanding active approval tokens — mirrors 0015 cleanup
+  update public.quote_approval_tokens
+     set revoked_at = now()
+   where quote_id = p_quote_id and revoked_at is null and decided_at is null;
+
+  -- (iv) OPTIONAL server-derived audit log (safe to delete; see SCOPE NOTE)
+  begin
+    select email into v_email from public.customers where id = v_cust;
+    insert into public.activity_log
+      (actor_id, actor_email, actor_role, action, entity_type, entity_id, summary, metadata)
+    values
+      (auth.uid(), v_email, 'customer', 'quote.approved', 'quote', v_updated::text,
+       'Customer approved quote ' || coalesce(v_number, v_updated::text) || ' via portal',
+       jsonb_build_object('source','portal','customer_id', v_cust));
+  exception when others then
+    null; -- never block the acceptance on a logging failure
+  end;
+
+  return json_build_object('quote_id', v_updated, 'status', 'accepted');
 end;
 $$;
 
 revoke all on function public.portal_approve_quote(uuid) from public, anon;
 grant execute on function public.portal_approve_quote(uuid) to authenticated;
 
--- B6. RPC: customer updates ONLY their own approved contact columns.
---     Cannot touch company_id, role, id, auth_user_id, notes, status, or
---     any financial field — only first/last name, email, phone.
+-- ---------------------------------------------------------------------
+-- B10. WRITE RPC — customer updates ONLY their own contact fields.
+--      Cannot touch id, company_id, auth_user_id, created_by, notes, status,
+--      or any financial field — only first/last name, email, phone.
+-- ---------------------------------------------------------------------
 create or replace function public.portal_update_contact(
   p_first_name text,
   p_last_name  text,
@@ -215,11 +536,9 @@ security definer
 set search_path = public, pg_temp
 as $$
 declare
-  v_cust uuid := public.current_customer_id();
+  v_cust uuid := public._portal_current_customer_id();
 begin
-  if v_cust is null then
-    raise exception 'Not authorized as a customer';
-  end if;
+  if v_cust is null then raise exception 'Not authorized as a customer'; end if;
 
   update public.customers
      set first_name = coalesce(nullif(btrim(p_first_name), ''), first_name),
@@ -239,46 +558,88 @@ commit;
 
 
 -- =====================================================================
--- PART C — VERIFICATION (READ-ONLY; run after Part B, paste results)
+-- PART C — VERIFICATION (READ-ONLY; run after Part B, paste every result)
 -- =====================================================================
 
--- C1. auth_user_id column exists.
-select exists (select 1 from information_schema.columns
-  where table_schema='public' and table_name='customers' and column_name='auth_user_id') as auth_user_id_exists;
+-- C1. Link column + uniqueness index exist.
+select
+  exists (select 1 from information_schema.columns
+          where table_schema='public' and table_name='customers' and column_name='auth_user_id') as auth_user_id_exists,
+  exists (select 1 from pg_indexes
+          where schemaname='public' and tablename='customers'
+            and indexname='customers_auth_user_id_unique') as unique_index_exists;
 
--- C2. Uniqueness protection exists.
-select indexname from pg_indexes
-where schemaname='public' and tablename='customers' and indexname='customers_auth_user_id_unique';
-
--- C3. Helper is SECURITY DEFINER + pinned search_path + NOT email-based.
-select p.prosecdef as security_definer,
-       p.proconfig as config,
-       (pg_get_functiondef(p.oid) !~* 'email') as no_email_resolution
+-- C2. All 9 functions: owner, SECURITY DEFINER, and safe pinned search_path.
+--     Expect owner=postgres (or your DB owner), security_definer=t for all,
+--     and proconfig containing search_path=public, pg_temp.
+select p.proname,
+       pg_get_userbyid(p.proowner) as owner,
+       p.prosecdef as security_definer,
+       p.proconfig as config
 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
-where n.nspname='public' and p.proname='current_customer_id';
+where n.nspname='public'
+  and p.proname in ('_portal_current_customer_id','portal_list_quotes','portal_get_quote',
+                    'portal_list_jobs','portal_get_job','portal_list_invoices',
+                    'portal_get_invoice','portal_approve_quote','portal_update_contact')
+order by p.proname;
 
--- C4. anon/PUBLIC have NO execute on the new functions (expect no anon/PUBLIC rows).
-select routine_name, grantee, privilege_type
-from information_schema.role_routine_grants
-where specific_schema='public'
-  and routine_name in ('current_customer_id','portal_approve_quote','portal_update_contact')
-order by routine_name, grantee;
+-- C3. The IDENTITY RESOLVER must not use email at all (expect 0 rows).
+--     Identity is resolved by auth.uid() only. (portal_update_contact and
+--     portal_approve_quote legitimately reference the email CONTACT field —
+--     that is not identity resolution and is intentionally NOT checked here.)
+select p.proname
+from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+where n.nspname='public'
+  and p.proname = '_portal_current_customer_id'
+  and pg_get_functiondef(p.oid) ~* 'email';
 
--- C5. Customer-self SELECT policies exist on all 7 tables.
-select tablename, policyname, cmd
-from pg_policies
-where schemaname='public' and policyname like '%customer_self_select'
-order by tablename;
+-- C4. Grants: authenticated may EXECUTE the 8 client RPCs; the internal
+--     resolver has NO client grant; anon/PUBLIC have NOTHING.
+select p.proname,
+       coalesce(array_to_string(p.proacl, ' | '), '(default/no explicit ACL)') as acl
+from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+where n.nspname='public'
+  and p.proname in ('_portal_current_customer_id','portal_list_quotes','portal_get_quote',
+                    'portal_list_jobs','portal_get_job','portal_list_invoices',
+                    'portal_get_invoice','portal_approve_quote','portal_update_contact')
+order by p.proname;
 
--- C6. Existing STAFF policies still present (compare to Part A5 — must be unchanged).
-select tablename, policyname, cmd
+-- C5. NO customer SELECT policy was added to any of the 7 base tables (expect 0).
+select tablename, policyname, cmd, roles
 from pg_policies
 where schemaname='public'
   and tablename in ('customers','quotes','quote_line_items','jobs','invoices','invoice_line_items','invoice_payments')
-  and policyname not like '%customer_self_select'
+  and (policyname ilike '%customer_self%' or policyname ilike '%portal%');
+
+-- C6. Staff policies UNCHANGED — this must equal the Part A5 snapshot exactly.
+select tablename, policyname, cmd, roles
+from pg_policies
+where schemaname='public'
+  and tablename in ('customers','quotes','quote_line_items','jobs','invoices','invoice_line_items','invoice_payments')
 order by tablename, policyname;
 
--- C7. No duplicate auth links (each auth user maps to <=1 customer).
+-- C7. Base-table grants UNCHANGED — this must equal the Part A6 snapshot exactly.
+select table_name, grantee, privilege_type
+from information_schema.role_table_grants
+where table_schema='public'
+  and table_name in ('customers','quotes','quote_line_items','jobs','invoices','invoice_line_items','invoice_payments')
+  and grantee in ('anon','authenticated','public','PUBLIC')
+order by table_name, grantee, privilege_type;
+
+-- C8. Function dependencies: confirm the 8 client RPCs reference the internal
+--     resolver (proves the identity gate is wired) — expect a row per RPC.
+select dependent.proname as rpc
+from pg_depend d
+join pg_proc dependent on dependent.oid = d.objid
+join pg_proc ref       on ref.oid = d.refobjid
+join pg_namespace n     on n.oid = dependent.pronamespace
+where n.nspname='public'
+  and ref.proname='_portal_current_customer_id'
+order by dependent.proname;
+-- (If empty on your PG version, dependency tracking for SQL bodies may not be
+--  recorded; C4/C3 + Part-C negative tests still prove the gate.)
+
+-- C9. Data integrity: no auth user maps to more than one customer (expect 0).
 select auth_user_id, count(*) as n
 from public.customers
 where auth_user_id is not null
@@ -286,51 +647,111 @@ group by auth_user_id having count(*) > 1;
 
 
 -- =====================================================================
--- PART D — OWNER LINKING INSTRUCTIONS (explicit IDs only; NO email match)
+-- PART D — OWNER LINKING (guarded, atomic; explicit IDs only, NO email match)
 -- =====================================================================
--- Link ONE existing customer record to ONE existing Auth user, by IDs you have
--- personally verified. Do NOT bulk-match by email. Steps:
+-- Replace the two UUIDs below with values you have personally verified.
+-- This transaction validates: both IDs exist, the auth user's profile is an
+-- ACTIVE 'customer' in a NON-NULL company that MATCHES the customer's company,
+-- there is no existing-link conflict, and EXACTLY ONE row is updated — else it
+-- aborts with an error and changes nothing.
 --
--- 1) Find the customer id (verify it is the correct person + company):
---      select id, company_id, first_name, last_name, email
---      from public.customers where email ilike '%<known email>%';
---
--- 2) Find the Auth user id (verify it is that same person's login):
---      select id, email from auth.users where email ilike '%<known email>%';
---    Confirm this user's profile is an ACTIVE customer in the SAME company:
---      select id, company_id, role, is_active from public.profiles where id = '<AUTH_USER_ID>';
---    (role must be 'customer', is_active true, company_id must equal the customer's company_id.)
---
--- 3) ONLY after visually confirming BOTH ids and the company match, link them:
---      update public.customers
---         set auth_user_id = '<AUTH_USER_ID>'
---       where id = '<CUSTOMER_ID>'
---         and auth_user_id is null;            -- refuse to overwrite an existing link
---
--- 4) Verify the link resolves:
---      -- as that signed-in user, public.current_customer_id() must return <CUSTOMER_ID>.
---      select id, auth_user_id from public.customers where id = '<CUSTOMER_ID>';
---
--- The unique index guarantees the same Auth user cannot be linked to a second
--- customer. To relink, first set auth_user_id = null on the old record.
+-- Pre-check (optional, read-only): confirm the pair you intend to link.
+--   select id, company_id, first_name, last_name, email, auth_user_id
+--   from public.customers where id = '<CUSTOMER_ID>';
+--   select u.id as auth_user_id, u.email, p.company_id, p.role, p.is_active
+--   from auth.users u join public.profiles p on p.id = u.id
+--   where u.id = '<AUTH_USER_ID>';
+
+do $$
+declare
+  v_customer_id uuid := '<CUSTOMER_ID>'::uuid;   -- <-- EDIT
+  v_auth_user   uuid := '<AUTH_USER_ID>'::uuid;  -- <-- EDIT
+  v_cust_company uuid;
+  v_prof_company uuid;
+  v_prof_role    text;
+  v_prof_active  boolean;
+  v_existing     uuid;
+  v_rows         integer;
+begin
+  -- 1. customer exists
+  select company_id, auth_user_id into v_cust_company, v_existing
+  from public.customers where id = v_customer_id;
+  if not found then
+    raise exception 'Customer % not found', v_customer_id;
+  end if;
+  if v_existing is not null then
+    raise exception 'Customer % is already linked to auth user %', v_customer_id, v_existing;
+  end if;
+
+  -- 2. auth user's profile exists, active, role=customer
+  select company_id, role::text, is_active
+    into v_prof_company, v_prof_role, v_prof_active
+  from public.profiles where id = v_auth_user;
+  if not found then raise exception 'No profile for auth user %', v_auth_user; end if;
+  if v_prof_role <> 'customer' then raise exception 'Auth user % is role % (must be customer)', v_auth_user, v_prof_role; end if;
+  if v_prof_active is not true then raise exception 'Auth user % profile is not active', v_auth_user; end if;
+
+  -- 3. non-null, matching company
+  if v_prof_company is null then raise exception 'Auth user % has no company', v_auth_user; end if;
+  if v_prof_company <> v_cust_company then
+    raise exception 'Company mismatch: customer=% profile=%', v_cust_company, v_prof_company;
+  end if;
+
+  -- 4. auth user not already linked to a different customer (belt & braces vs. unique index)
+  if exists (select 1 from public.customers where auth_user_id = v_auth_user) then
+    raise exception 'Auth user % is already linked to another customer', v_auth_user;
+  end if;
+
+  -- 5. atomic link; refuse to overwrite; require exactly one updated row
+  update public.customers
+     set auth_user_id = v_auth_user
+   where id = v_customer_id and auth_user_id is null;
+  get diagnostics v_rows = row_count;
+  if v_rows <> 1 then raise exception 'Expected to update exactly 1 row, updated %', v_rows; end if;
+
+  raise notice 'Linked customer % -> auth user %', v_customer_id, v_auth_user;
+end $$;
+
+-- Verify the link resolves (run while signed in AS that customer user):
+--   select public._portal_current_customer_id();   -- must return <CUSTOMER_ID>
+-- To relink, first set auth_user_id = null on the old customer row.
 
 
 -- =====================================================================
 -- PART E — ROLLBACK (removes ONLY objects created by 0024)
 -- =====================================================================
+-- Drops the 9 functions + the unique index. Optionally drops the column
+-- (ONLY if you are certain no links exist / no data depends on it). Because
+-- 0024 uses a NEW internal resolver name and adds NO base-table policies or
+-- grants, this rollback restores the exact pre-0024 state — legacy
+-- public.current_customer_id(), all staff policies, and all table grants are
+-- untouched by both this migration AND this rollback.
+--
 -- begin;
---   drop policy if exists "customers_customer_self_select"            on public.customers;
---   drop policy if exists "quotes_customer_self_select"               on public.quotes;
---   drop policy if exists "quote_line_items_customer_self_select"     on public.quote_line_items;
---   drop policy if exists "jobs_customer_self_select"                 on public.jobs;
---   drop policy if exists "invoices_customer_self_select"             on public.invoices;
---   drop policy if exists "invoice_line_items_customer_self_select"   on public.invoice_line_items;
---   drop policy if exists "invoice_payments_customer_self_select"     on public.invoice_payments;
---   drop function if exists public.portal_approve_quote(uuid);
 --   drop function if exists public.portal_update_contact(text, text, text, text);
---   drop function if exists public.current_customer_id();
+--   drop function if exists public.portal_approve_quote(uuid);
+--   drop function if exists public.portal_get_invoice(uuid);
+--   drop function if exists public.portal_list_invoices(integer, integer);
+--   drop function if exists public.portal_get_job(uuid);
+--   drop function if exists public.portal_list_jobs(integer, integer);
+--   drop function if exists public.portal_get_quote(uuid);
+--   drop function if exists public.portal_list_quotes(integer, integer);
+--   drop function if exists public._portal_current_customer_id();
 --   drop index if exists public.customers_auth_user_id_unique;
---   -- Only drop the column if you are sure no data depends on it:
+--   -- Only if you are certain nothing depends on it:
 --   -- alter table public.customers drop column if exists auth_user_id;
 -- commit;
--- Staff policies, staff RPCs, invoices/quotes/jobs logic are NOT touched by rollback.
+
+
+-- =====================================================================
+-- PART F — OPTIONAL legacy-resolver hardening (independent of the portal)
+-- =====================================================================
+-- The legacy public.current_customer_id() (email-based) is DORMANT and
+-- NON-EXECUTABLE by every client since 0006. 0024 does NOT use, alter, or
+-- rely on it. If you want to eliminate the dormant email-based function
+-- entirely, FIRST save its definition from Part A3, then:
+--   drop function if exists public.current_customer_id();
+-- Reversal: re-run the saved Part A3 definition, then re-apply 0006's revokes:
+--   revoke execute on function public.current_customer_id() from public, anon, authenticated;
+-- Do NOT drop it if any object still depends on it (Part A3 output is empty of
+-- dependents in this project, but re-confirm on your live DB before dropping).

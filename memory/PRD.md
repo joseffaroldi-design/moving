@@ -511,3 +511,30 @@ RC1 migration files: /app/supabase/migrations/ (RC1_R2/R3/R5, 0018–0023, verif
 - Blocker labels UNCHANGED by this hosting decision: RC1 COMPLETE; B1 CLOSED; B2 MITIGATED (documented platform-owned residual); B3 CLOSED.
 - Production approval remains NO pending: Vercel deployment prep + owner authorization + post-deploy production verification.
 - Vercel runbook: see PRC1 Checkpoint 3 audit (this session). No app/deploy/DB changes made during the audit.
+
+## Phase 9 — Customer Portal foundation (2026-06, AUTHORED — pending owner execution)
+Architecture APPROVED: **explicit-field read RPCs** (no customer base-table SELECT
+policies; RLS filters rows not columns, so broad SELECT would leak internal cols).
+- **0024_customer_portal_access.sql — REVISED & AUTHORED (owner to execute).**
+  Adds `customers.auth_user_id` (nullable FK + partial unique index) and:
+  - `_portal_current_customer_id()` internal resolver — auth.uid() ONLY (no email,
+    no LIMIT 1); requires active `customer` profile + non-null company matching the
+    customer's company; EXECUTE revoked from all clients.
+  - 6 read RPCs returning explicit `json_build_object` whitelists only:
+    `portal_list_quotes/get_quote`, `portal_list_jobs/get_job`,
+    `portal_list_invoices/get_invoice`. Drafts hidden; jobs exclude dispatch_notes/
+    crew/truck; payments exclude recorded_by. Lists paginate (limit clamp 1..100)
+    with deterministic order.
+  - `portal_approve_quote(uuid)` — reproduces authoritative 0015 acceptance
+    invariants (expiry guard + status-guarded atomic `UPDATE...RETURNING` on
+    sent/viewed + revoke outstanding approval tokens), row locked FOR UPDATE;
+    OPTIONAL wrapped server-derived activity_log write (deletable block iv).
+  - `portal_update_contact(...)` — customer edits only own name/email/phone.
+  - All 8 client RPCs: authenticated EXECUTE only; anon/PUBLIC none. NO staff RLS/
+    grant/business-logic changes. Legacy email-based `current_customer_id()` left
+    dormant/untouched (optional Part F hardening documented).
+  - Owner runbook + column-exposure matrix + acceptance-dependency analysis +
+    positive/negative verification matrix + guarded Part D linking transaction +
+    rollback + Security Advisor step: `/app/supabase/PHASE9_0024_owner_runbook.md`.
+  - STATUS: awaiting owner approval + manual execution (author executes nothing).
+    No portal UI built yet (Phase 9 Priority 1 UI is the next step post-0024).
