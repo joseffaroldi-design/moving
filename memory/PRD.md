@@ -619,3 +619,40 @@ SQL/migration changes, NO new RPC. Client components use the browser Supabase se
 ### Next
 - Owner completes the portal UI runbook with a live test-customer session.
 - Then Phase 9 P2 Crew Mobile / P3 Ops / P4 Reporting / P5 Polish.
+
+## Phase 9 P2 — Crew Mobile (2026-06, STARTED; awaiting preflight_0027 JSON)
+User authorized starting P2 (overrides the P1-hold; P1 remains BUILT/owner-acceptance-pending).
+Same strict owner-run-SQL boundary + no-credentials testing boundary as all prior phases.
+Current mobile screens are ALL mocked (jobs = mvp-dashboard company-wide; clock/checklist =
+local state; photos = toast stub). Crew↔job link = `job_crew(job_id, profile_id, role)` where
+profile_id = auth.uid(). Legacy tables present (columns unknown → preflight): crew_time_entries
+(clock), document_signatures (signatures), job_photos, job_checklists, job_status_events.
+
+### Planned slices (author SQL → owner runs → verify → wire frontend)
+- 0027 — crew identity resolver (auth.uid → active crew_lead/mover profile + company) +
+  assigned-jobs READ RPCs (jobs the caller is on via job_crew; explicit customer-safe fields,
+  mirrors portal architecture). Wire mobile Jobs list + job detail. [FIRST — read-only]
+- 0028 — clock in/out via crew_time_entries (start/stop, current-shift status).
+- 0029 — job status/checklist from the field.
+- 0030 — job photo upload (Supabase Storage bucket from 0005) + job_photos registration.
+- 0031 — customer signature capture (document_signatures).
+
+### Confirmed decisions (owner)
+1. Crew job-status rights = BOTH: crew may advance the real lifecycle
+   (Confirmed→In Progress→Completed) AND append operational events, but ONLY for jobs assigned
+   to them. Forward-only approved transitions — NO cancel/reschedule/reassign/financial/backward/
+   skip. Every change audited/logged.
+2. Photos = Supabase Storage (0005 bucket), PRIVATE; upload/read restricted to authenticated crew
+   assigned to that job (object-storage playbook).
+3. Signatures = reuse legacy document_signatures IF preflight confirms schema/security are
+   suitable; if incompatible, STOP and report the exact mismatch before creating a new table.
+4. Priority = order above (identity/read first).
+5. Testing = unchanged no-credentials boundary (tsc + build + fixtures + unauth-denial + security
+   + owner runbook). No passwords/JWTs/service-role/customer data.
+
+### Status
+- Authored READ-ONLY `preflight_0027_crew_mobile_schema.sql` (inventories the 7 crew tables +
+  columns/FKs/RLS/policies/grants/row-counts + crew functions + job_status/user_role enums +
+  job-photo storage bucket & storage.objects policies).
+- HOLD: do NOT author/run migration 0027 until the owner returns the full preflight JSON.
+
