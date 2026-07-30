@@ -557,3 +557,55 @@ Dependency-ordered migrations: 0024 (done) → 0025 quarantine → 0026 portal.
 - STATUS: awaiting owner approval + manual execution (author executes nothing).
   NO-GO on 0026 Part B until 0025 quarantine applied + Part D shows zero resolver
   deps. No portal UI built yet.
+
+## Phase 9 — Customer Portal UI (2026-06, BUILT; tsc + build + unauth + fixtures PASS)
+Backend 0024/0025/0026 APPLIED & VERIFIED (owner). test-customer@example.com linked.
+Replaced the static portal stubs with a full RPC-backed portal. STRICT BOUNDARY honored:
+the portal makes ONLY `rpc/portal_*` calls — NO base-table reads, NO service_role, NO
+SQL/migration changes, NO new RPC. Client components use the browser Supabase session.
+
+### New/changed files
+- NEW `src/lib/portal.ts` — typed service layer; 8 RPC wrappers (names/args mirror 0026
+  exactly): portalListQuotes/GetQuote/ListJobs/GetJob/ListInvoices/GetInvoice/
+  ApproveQuote/UpdateContact. Re-exports pure helpers from portalLogic.js; isNotCustomerError;
+  label helpers (quote/invoice/job).
+- `src/lib/portalLogic.js` (pre-existing) + NEW `src/lib/portalLogic.test.mjs` (11 fixture
+  tests, all pass via `node --test`): classifyApproval, isPortalOverdue, buildContactArgs,
+  safeErrorMessage, outstandingBalance, quoteLooksApprovable.
+- NEW `src/components/portal/PortalStates.tsx` (PortalNotCustomer state).
+- NEW `src/components/portal/PortalPrintDocuments.tsx` (PortalQuotePrint, PortalInvoicePrint
+  — render ONLY portal-RPC fields; branded; no staff loaders).
+- REWROTE `src/app/portal/page.tsx` (Overview: outstanding/awaiting-quotes/next-move stats +
+  recent quotes/invoices + upcoming move; computed from list RPCs; empty + not-customer states).
+- REWROTE `src/app/portal/quotes/page.tsx` (list + detail drawer + Approve [handles accepted/
+  expired/errors] + Print link).
+- NEW `src/app/portal/jobs/page.tsx` ("My Move": list + detail drawer w/ 4-stage timeline;
+  no dispatch notes/crew/trucks).
+- REWROTE `src/app/portal/payments/page.tsx` (view-only invoices; derived Overdue; payment
+  history; outstanding banner; "Contact us to arrange payment" → BRAND.phone; NO Stripe/writes).
+- REWROTE `src/app/portal/documents/page.tsx` (polished coming-soon).
+- NEW `src/app/portal/profile/page.tsx` (portal_update_contact only; fields blank w/ "leave
+  blank to keep"; shows session email; gate via portal RPC, no customers read).
+- NEW `src/app/print/portal/quote/[id]/page.tsx` + `.../invoice/[id]/page.tsx` (client;
+  portal RPCs + window.print via PrintBar; under clean /print layout, outside AppShell;
+  graceful "please sign in" state).
+- `src/lib/nav.ts`: PORTAL_NAV += "My Move" (jobs) and "Profile"; Documents icon → FileSignature.
+
+### RPC → screen map
+- portal_list_quotes/portal_get_quote → Overview, Quotes, print quote.
+- portal_list_jobs/portal_get_job → Overview (upcoming move), My Move.
+- portal_list_invoices/portal_get_invoice → Overview (outstanding), Payments, print invoice.
+- portal_approve_quote → Quotes approve. portal_update_contact → Profile.
+
+### Verification (2026-06)
+- `tsc --noEmit` PASS. `yarn build` PASS (all portal + print routes emitted). node --test 11/11 PASS.
+- Unauth: /portal, /portal/{quotes,jobs,payments,profile} → 307 /login (middleware). Print
+  pages (outside protected paths) render graceful "please sign in" (verified via screenshot).
+- Authenticated customer flows NOT auto-tested (no-credentials boundary). Owner runbook:
+  `/app/supabase/PHASE9_portal_ui_owner_test_runbook.md`.
+- Frontend served by `next start` (prod, no hot reload) → after edits: `rm -rf .next && yarn build`
+  + `supervisorctl restart frontend`.
+
+### Next
+- Owner completes the portal UI runbook with a live test-customer session.
+- Then Phase 9 P2 Crew Mobile / P3 Ops / P4 Reporting / P5 Polish.

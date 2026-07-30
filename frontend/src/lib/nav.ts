@@ -3,6 +3,7 @@ import {
   Users,
   UserRound,
   FileText,
+  FileSignature,
   Truck,
   CalendarClock,
   Receipt,
@@ -41,8 +42,10 @@ export function allowedStaffNav(role?: string | null): NavItem[] {
 export const PORTAL_NAV: NavItem[] = [
   { label: "Overview", href: "/portal", icon: LayoutDashboard },
   { label: "Quotes", href: "/portal/quotes", icon: FileText },
+  { label: "My Move", href: "/portal/jobs", icon: Briefcase },
   { label: "Payments", href: "/portal/payments", icon: Receipt },
-  { label: "Documents", href: "/portal/documents", icon: FileText },
+  { label: "Profile", href: "/portal/profile", icon: UserRound },
+  { label: "Documents", href: "/portal/documents", icon: FileSignature },
 ];
 
 export const MOBILE_NAV: NavItem[] = [
