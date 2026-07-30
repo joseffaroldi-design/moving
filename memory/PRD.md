@@ -558,7 +558,17 @@ Dependency-ordered migrations: 0024 (done) → 0025 quarantine → 0026 portal.
   NO-GO on 0026 Part B until 0025 quarantine applied + Part D shows zero resolver
   deps. No portal UI built yet.
 
-## Phase 9 — Customer Portal UI (2026-06, BUILT; tsc + build + unauth + fixtures PASS)
+## Phase 9 — Customer Portal UI (2026-06, BUILT; OWNER ACCEPTANCE TESTING PENDING)
+STATUS: **Phase 9 P1 — Customer Portal UI: BUILT; OWNER ACCEPTANCE TESTING PENDING.**
+Code-complete and verified within the no-credentials boundary (tsc + build + unauth
+redirects + print graceful states + 11/11 fixture tests). Authenticated customer flows
+NOT yet verified against live Supabase — awaiting owner-executed acceptance testing via
+`/app/supabase/PHASE9_portal_ui_owner_test_runbook.md` (11 checks). HOLD: no Stripe/online
+payments, no new migrations/RPC changes, no Supabase/prod changes, no Crew Mobile, no
+unrelated refactors until owner evidence closes P1. Then proceed to Phase 9 P2 — Crew
+Mobile. Stripe is a deferred future enhancement (after core portal + ops workflows are
+production-stable).
+
 Backend 0024/0025/0026 APPLIED & VERIFIED (owner). test-customer@example.com linked.
 Replaced the static portal stubs with a full RPC-backed portal. STRICT BOUNDARY honored:
 the portal makes ONLY `rpc/portal_*` calls — NO base-table reads, NO service_role, NO
