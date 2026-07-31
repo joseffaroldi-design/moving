@@ -1,4 +1,4 @@
-// Public estimate-intake client. Posts to the `public-estimate-intake` Edge
+// Public lead-intake client. Posts to the `public-lead-intake` Edge
 // Function. No DB access from the browser; the function holds the service role.
 //
 // Activation: set NEXT_PUBLIC_ESTIMATE_INTAKE_ENABLED="true" AFTER the Edge
@@ -53,7 +53,7 @@ export async function submitEstimate(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 12000);
   try {
-    const resp = await fetch(`${base}/functions/v1/public-estimate-intake`, {
+    const resp = await fetch(`${base}/functions/v1/public-lead-intake`, {
       method: "POST",
       headers: { "Content-Type": "application/json", apikey },
       body: JSON.stringify({

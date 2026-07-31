@@ -77,7 +77,7 @@ check("INTAKE_ENABLED reflects env override (ON)", INTAKE_ENABLED === true);
   mockFetch({ ok: true, message: "Received" });
   const res = await submitEstimate(payload, "idem-123");
   check("success response returns ok:true", res.ok === true);
-  check("posts to /functions/v1/public-estimate-intake", String(lastCall.url).endsWith("/functions/v1/public-estimate-intake"));
+  check("posts to /functions/v1/public-lead-intake", String(lastCall.url).endsWith("/functions/v1/public-lead-intake"));
   check("sends apikey header", lastCall.opts.headers.apikey === "mock-anon-key");
   check("body includes idempotency_key", lastCall.body.idempotency_key === "idem-123");
   check("body includes empty honeypot company_website", lastCall.body.company_website === "");
