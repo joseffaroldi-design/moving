@@ -1,0 +1,24 @@
+{
+  "summary": "Frontend-only E2E verification of the public marketing homepage (/) for Southern Magnolia Movers. All 15 requested checks PASS. Homepage loads at preview URL, scrolls normally via window.scrollTo AND via anchor clicks (scrollHeight=6345, no nested scroll container; body/html overflow=visible). Hero headline 'Moving You Forward. Cleaning Out the Past.' renders with CTAs. Trust bar shows all 4 items. Why Choose Us shows 'New Orleans Roots...' heading. Services grid renders all 6 service names. Process timeline renders 5 named steps. Testimonials carousel: next/prev/dots all mutate the quote text (data-testid testimonial-quote). FAQ accordion: faq-toggle-0..4 all present; aria-expanded flips true/false on click. Service Area lists New Orleans, Metairie, Kenner, Covington (+ Mandeville, Slidell, Hammond, Gretna, Laplace, Houma). Estimate form submits (frontend-only by design) and shows estimate-success + estimate-success-call-btn with 'Thank you, Jane.' state. Sticky header with nav-services dropdown present; all 5 nav anchor links (#why-us #process #service-area #faqs #estimate) smooth-scroll such that the target section top lands ~96px below viewport top (accounts for fixed header) — PASS. Mobile viewport 390: mobile-menu-toggle visible, mobile-menu max-height goes 0px -> 590.8px -> 0px on toggle. Footer staff-login-link href='/login'. Responsive: 0px horizontal overflow at 1440, 768, and 390. Zero broken images (naturalWidth>0 for all imgs). 1 unrelated benign console error observed (same as previous iteration — non-CSP, likely Supabase anon session probe). Manual-testing concern from main agent about mouse-wheel/window.scrollTo not scrolling is NOT reproducible in this run — scrollTo(0,2000) resulted in scrollY=1887 (correct) and every anchor click scrolled to its section.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Testimonials placeholder reviews are clearly marked in code as PLACEHOLDER (good) — must be replaced with real, verified reviews before public launch to avoid misleading claims.",
+    "EstimateForm intentionally does not persist data (approved). When wiring the anon-safe RPC/Edge Function, remember to also add rate-limiting + honeypot to protect the public endpoint.",
+    "Services dropdown in header links all items to '#services' anchor; individual service deep-links (or dedicated /services/... pages) would be a nice UX enhancement, non-blocking."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped per request)", "frontend": "100%"},
+  "test_credentials": "N/A — public marketing homepage only, no login attempted",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Homepage is stable. Verified data-testids: site-header, header-logo, nav-services, header-call-btn, header-estimate-btn, mobile-menu-toggle, mobile-menu, testimonial-quote, testimonial-prev, testimonial-next, faq-toggle-0..4, estimate-form, estimate-first-name, estimate-last-name, estimate-email, estimate-phone, estimate-move-type, estimate-move-date, estimate-submit-btn, estimate-success, estimate-success-call-btn, estimate-edit-btn, staff-login-link, faq-section, testimonials-section. Anchor IDs on page: #why-us, #process, #service-area, #faqs, #estimate, #services. Fixed header height ~96px is what all smooth-scroll offsets converge on (looks intentional via scroll-margin/anchor CSS).",
+  "rca of the issue": "N/A — no issues found. Previously reported concern about mouse-wheel/scrollTo not working could not be reproduced; page scrolls normally in the current build."
+}
