@@ -1,144 +1,137 @@
 {
-  "project_name": "MoveOps",
-  "theme_strategy": "Light mode primary with Dark Navy structural elements (sidebar, top nav). High-contrast data presentation. Optimized for power users requiring high information density without clutter.",
-  "color_system": {
-    "brand_navy": {
-      "DEFAULT": "#0B1527",
-      "description": "Used for sidebar background, primary heading text, and primary high-contrast buttons."
-    },
-    "slate": {
-      "900": "#0F172A",
-      "800": "#1E293B",
-      "700": "#334155",
-      "600": "#475569",
-      "500": "#64748B",
-      "400": "#94A3B8",
-      "300": "#CBD5E1",
-      "200": "#E2E8F0",
-      "100": "#F1F5F9",
-      "50": "#F8FAFC",
-      "description": "Used for borders (200), dividers (200), secondary text (500), subtle backgrounds (50)."
-    },
-    "accent_blue": {
-      "DEFAULT": "#2563EB",
-      "hover": "#1D4ED8",
-      "muted": "#EFF6FF",
-      "description": "Restrained blue for primary actions, active states, checkboxes, and text links."
-    },
-    "surface": {
-      "background": "#F1F5F9",
-      "card": "#FFFFFF",
-      "sidebar": "#0B1527"
-    }
-  },
+  "theme": "light",
+  "archetype": "LUXURY",
   "typography": {
-    "fonts": {
-      "heading": "'Chivo', sans-serif",
-      "body": "'IBM Plex Sans', sans-serif"
+    "headings": {
+      "font_family": "font-serif (Playfair-style, already configured)",
+      "weight": "font-normal to font-medium (Avoid heavy bolding for luxury feel)",
+      "tracking": "tracking-tight",
+      "hierarchy": {
+        "h1": "text-5xl md:text-6xl lg:text-7xl leading-[1.1]",
+        "h2": "text-4xl md:text-5xl leading-tight",
+        "h3": "text-2xl md:text-3xl leading-snug",
+        "h4": "text-xl font-sans tracking-widest uppercase text-gold"
+      }
     },
-    "scale": {
-      "h1": "text-2xl font-bold tracking-tight text-brand-navy",
-      "h2": "text-xl font-semibold tracking-tight text-brand-navy",
-      "h3": "text-lg font-medium text-brand-navy",
-      "body": "text-sm text-slate-700 leading-relaxed",
-      "table_data": "text-sm text-slate-900 font-medium",
-      "table_header": "text-xs font-semibold text-slate-500 uppercase tracking-wider",
-      "caption": "text-xs text-slate-500"
+    "body": {
+      "font_family": "font-sans (already configured)",
+      "weight": "font-light to font-normal",
+      "tracking": "tracking-normal",
+      "size": "text-base md:text-lg leading-relaxed text-navy/80"
+    },
+    "labels": {
+      "style": "text-xs md:text-sm font-sans uppercase tracking-[0.2em] text-navy/60 font-semibold"
     }
   },
-  "spacing_and_layout": {
-    "density_system": "Compact Data Density",
-    "sidebar_width": "w-64 (expanded), w-16 (collapsed)",
-    "padding": {
-      "container": "p-6",
-      "card": "p-4 sm:p-5",
-      "table_cell": "px-3 py-2",
-      "mobile_crew_screen": "p-4"
+  "colors": {
+    "backgrounds": {
+      "primary": "bg-cream",
+      "secondary": "bg-cream-100",
+      "dark_section": "bg-navy",
+      "accent": "bg-gold"
+    },
+    "text": {
+      "primary": "text-navy",
+      "secondary": "text-navy/70",
+      "on_dark": "text-cream",
+      "on_dark_secondary": "text-cream/70",
+      "accent": "text-gold"
     },
     "borders": {
-      "radius": "rounded-md (subtle, professional, not overly playful)",
-      "width": "border border-slate-200"
-    },
-    "shadows": {
-      "card": "shadow-sm",
-      "dropdown": "shadow-lg shadow-slate-200/50"
+      "light": "border-navy/10",
+      "dark": "border-cream/10",
+      "accent": "border-gold/50"
     }
   },
-  "status_badge_system": {
-    "styles": "px-2 py-0.5 rounded-full text-xs font-semibold uppercase tracking-wider border",
-    "variants": {
-      "new_draft_scheduled": {
-        "bg": "bg-slate-100",
-        "text": "text-slate-700",
-        "border": "border-slate-300"
-      },
-      "in_progress_contacted": {
-        "bg": "bg-blue-50",
-        "text": "text-blue-700",
-        "border": "border-blue-200"
-      },
-      "completed_won_approved_paid": {
-        "bg": "bg-emerald-50",
-        "text": "text-emerald-700",
-        "border": "border-emerald-200"
-      },
-      "lost_expired_overdue": {
-        "bg": "bg-red-50",
-        "text": "text-red-700",
-        "border": "border-red-200"
-      }
-    }
+  "visual_enhancers": {
+    "shadows": "Very subtle. Use shadow-[0_8px_30px_rgb(10,25,47,0.04)] instead of default drop shadows.",
+    "borders": "1px solid borders using border-navy/10 or border-cream/10. No thick borders.",
+    "border_radius": "Sharp corners (rounded-none) or very minimal (rounded-sm). Luxury leans structural.",
+    "textures": "Use noise overlay on dark Navy sections to add velvet/matte depth. E.g., a fixed div with opacity-5 mix-blend-overlay."
   },
   "components": {
-    "sidebar": {
-      "style": "bg-[#0B1527] text-slate-300 flex flex-col h-screen fixed",
-      "active_link": "bg-slate-800 text-white border-l-4 border-accent-blue",
-      "hover_link": "hover:bg-slate-800 hover:text-white transition-colors"
+    "buttons": {
+      "primary": "bg-gold text-navy font-sans uppercase tracking-widest text-sm px-8 py-4 rounded-none hover:bg-gold-hover transition-colors duration-300",
+      "secondary": "bg-transparent text-navy border border-navy/20 font-sans uppercase tracking-widest text-sm px-8 py-4 rounded-none hover:border-navy transition-colors duration-300",
+      "on_dark": "bg-cream text-navy hover:bg-cream-100"
     },
-    "tables": {
-      "container": "bg-white border border-slate-200 rounded-md shadow-sm overflow-hidden",
-      "header_row": "bg-slate-50 border-b border-slate-200",
-      "row": "border-b border-slate-100 hover:bg-slate-50 transition-colors group",
-      "cell": "px-3 py-2 whitespace-nowrap text-sm",
-      "actions": "opacity-0 group-hover:opacity-100 transition-opacity"
+    "inputs": {
+      "style": "bg-transparent border-b border-navy/20 rounded-none px-0 py-3 focus:ring-0 focus:border-gold transition-colors font-sans text-navy placeholder:text-navy/40"
     },
-    "cards_kpi": {
-      "style": "bg-white p-4 rounded-md border border-slate-200 shadow-sm flex flex-col justify-between",
-      "value": "text-2xl font-bold text-brand-navy",
-      "label": "text-sm text-slate-500 font-medium"
+    "cards": {
+      "style": "bg-cream-100 border border-navy/5 p-8 hover:-translate-y-1 transition-transform duration-500",
+      "alternative": "Cardless editorial layout: Image + overlapping text block, no containing box."
     },
-    "dispatch_board": {
-      "layout": "List-based dense timeline. NOT drag-and-drop. Rows represent trucks/crews, columns represent time blocks or current jobs. High contrast status badges."
-    },
-    "mobile_crew_app": {
-      "layout": "Bottom navigation bar, large touch targets (min 44px height). High contrast.",
-      "buttons": "w-full py-3 rounded-md text-base font-semibold",
-      "primary_action": "bg-brand-navy text-white active:bg-slate-800",
-      "checklist_item": "flex items-center gap-3 p-4 border-b border-slate-200 active:bg-slate-50"
+    "accordion": {
+      "style": "border-b border-navy/10 py-4. Serif text for questions, sans for answers. Plus/minus icon over chevrons."
     }
   },
-  "images": [
-    {
-      "category": "auth_background",
-      "url": "https://images.pexels.com/photos/33897865/pexels-photo-33897865.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
-      "description": "Professional moving truck on coastal road, used as a high-quality background for the login/auth split screen."
+  "layouts": {
+    "spacing": {
+      "section_padding": "py-24 md:py-32 lg:py-40",
+      "container": "max-w-7xl mx-auto px-6 md:px-12",
+      "gap": "gap-12 md:gap-24"
     },
-    {
-      "category": "crew_avatar_placeholder",
-      "url": "https://images.pexels.com/photos/7464401/pexels-photo-7464401.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
-      "description": "Moving company crew workers, can be cropped for profile avatars in the dispatch board."
+    "grid": {
+      "bento_asymmetric": "grid grid-cols-1 md:grid-cols-12 gap-8. Mix col-span-4, col-span-8 to avoid perfect symmetry.",
+      "editorial_split": "grid grid-cols-1 lg:grid-cols-2 gap-16 items-center"
     }
+  },
+  "motion": {
+    "page_scroll": "Lenis smooth scrolling (MANDATORY for premium feel)",
+    "reveals": "Framer Motion: Initial opacity 0, y 20, duration 0.8s, ease [0.16, 1, 0.3, 1]. Stagger children.",
+    "parallax": "Subtle y-axis translation on images on scroll. Do not overdo it.",
+    "image_hover": "Scale image 1.05 inside overflow-hidden container. Slow transition (duration-700)."
+  },
+  "media": {
+    "artwork_handling": {
+      "file": "/public/brand/login-art.jpg",
+      "challenge": "It is a portrait poster with a cream border. Do not stretch to full-bleed landscape.",
+      "desktop_strategy": "Split the hero or use a blended edge. Set the Hero background to `bg-navy`. Place text on the left. On the right, position the artwork absolutely or in a grid cell using `object-fit: contain` or `object-fit: cover` with `object-position: right top`. Apply a CSS mask: `mask-image: linear-gradient(to right, transparent 0%, black 20%)` so it fades beautifully into the navy. Alternatively, display it as a majestic 'framed' piece of art on the right overlapping the next section.",
+      "mobile_strategy": "The screen is portrait, so the artwork fits well as `bg-cover`. Add a `bg-navy/70` overlay so the white/gold text remains accessible."
+    },
+    "photography": {
+      "style": "Editorial, desaturated, high-contrast. Avoid bright generic stock colors. Use grayscale or sepia filters via CSS if an image clashes with the Navy/Gold palette (`grayscale contrast-125 mix-blend-luminosity opacity-80`)."
+    }
+  },
+  "image_urls": {
+    "residential": {
+      "url": "https://images.unsplash.com/photo-1613545325278-f24b0cae1224?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzB8MHwxfHNlYXJjaHwxfHxwcm9mZXNzaW9uYWwlMjBtb3ZpbmclMjBjb21wYW55JTIwbHV4dXJ5JTIwaG9tZXxlbnwwfHx8fDE3ODU0ODU0NTN8MA&ixlib=rb-4.1.0&q=85",
+      "description": "High-end white and brown living room, representing luxury residential moves.",
+      "category": "Services - Residential"
+    },
+    "commercial": {
+      "url": "https://images.unsplash.com/photo-1594437001318-2b5c7a9c7291?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzl8MHwxfHNlYXJjaHwzfHxuZXclMjBvcmxlYW5zJTIwZnJlbmNoJTIwcXVhcnRlciUyMGFyY2hpdGVjdHVyZSUyMHN1bnNldHxlbnwwfHx8fDE3ODU0ODU0NTN8MA&ixlib=rb-4.1.0&q=85",
+      "description": "Classic New Orleans concrete building, representing commercial moving.",
+      "category": "Services - Commercial"
+    },
+    "local_nola": {
+      "url": "https://images.unsplash.com/photo-1568693059993-a239b9cd4957?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzl8MHwxfHNlYXJjaHwxfHxuZXclMjBvcmxlYW5zJTIwZnJlbmNoJTIwcXVhcnRlciUyMGFyY2hpdGVjdHVyZSUyMHN1bnNldHxlbnwwfHx8fDE3ODU0ODU0NTN8MA&ixlib=rb-4.1.0&q=85",
+      "description": "New Orleans French Quarter architecture.",
+      "category": "Why Southern Magnolia / Service Area"
+    },
+    "specialty_packing": {
+      "url": "https://images.unsplash.com/photo-1650046003573-ffaaf75581b2?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxODl8MHwxfHNlYXJjaHwyfHxwYWNraW5nJTIwZmluZSUyMGFydCUyMGFudGlxdWUlMjBzYWZlfGVufDB8fHx8MTc4NTQ4NTQ1M3ww&ixlib=rb-4.1.0&q=85",
+      "description": "Close up of an antique safe/metal lock, representing fine art & specialty packing.",
+      "category": "Services - Specialty/Packing"
+    }
+  },
+  "instructions_to_main_agent": [
+    "You are building a Luxury Hospitality-style marketing site for a New Orleans moving company.",
+    "CRITICAL: Do NOT replace or recreate the artwork (`/public/brand/login-art.jpg`). Follow the specific handling strategies in `media.artwork_handling` to make it look premium.",
+    "CRITICAL: Do NOT use generic blue-and-white moving site tropes. Use the provided Tailwind tokens: navy, gold, cream.",
+    "Do NOT use standard rounded Shadcn cards. Strip all border-radius to `rounded-none`. Use 1px borders.",
+    "Ensure Header has a background (`bg-cream/90 backdrop-blur-md`). Do NOT use a fully transparent header.",
+    "Implement the 'Get Free Estimate' short form in the Hero or right below it. Do NOT use default HTML inputs; use styled pure Tailwind inputs that look like high-end luxury forms (border-bottom only).",
+    "Section Flow: Hero -> Trust/Why Us -> Services (Editorial list, not grids of generic boxes) -> Our Process (Minimalist timeline) -> Reviews (Large serif blockquotes) -> Area/FAQ -> Estimate CTA Block -> Footer.",
+    "All interactive elements MUST have `data-testid` attributes (e.g., `data-testid=\"hero-estimate-cta\"`).",
+    "Ensure accessibility (WCAG AA). Navy text on Cream is perfect. White/Cream text on Navy is perfect. Do not put Navy on Navy or Gold on White without checking contrast."
   ],
-  "UNIVERSAL_GUIDELINES_FOR_MAIN_AGENT": [
-    "You tend to converge toward generic, 'on distribution' outputs. Avoid oversized padding (like p-8 in data tables) and massive text. This is a B2B Operations tool—optimize for data density.",
-    "Do NOT use generic AI illustrations or empty marketing copy. Use real-world demo data (e.g., '123 Main St, Springfield', 'Quote #Q-10492', 'Crew Alpha').",
-    "Avoid glassmorphism. Use flat, solid backgrounds with subtle 1px borders (Swiss Brutalist / Utility style) to convey structural rigidity and precision.",
-    "Do NOT center-align lists, tables, or forms. Left-align for reading efficiency.",
-    "Ensure all interactive elements (buttons, rows, links) have distinct hover AND focus states.",
-    "Implement loading skeletons for tables and metric cards. No spinning loaders full screen.",
-    "All interactive and key informational elements MUST include a data-testid attribute.",
-    "Do NOT use default Inter or Roboto fonts. Implement IBM Plex Sans for body/data and Chivo for headings via next/font/google.",
-    "Use Lucide-react for all icons with consistent sizing (w-4 h-4 for inline, w-5 h-5 for sidebar).",
-    "Mobile views must hide complex tables and replace them with stacked cards, prioritizing large touch targets for crew members."
+  "universal_guidelines": [
+    "You MUST NOT apply universal transitions (e.g., `transition: all`). Target specific properties.",
+    "You MUST NOT center align the app container. Use natural left-aligned typography.",
+    "Never use AI assistant emojis. Use `lucide-react` or `@phosphor-icons/react`.",
+    "Layered design: Use z-index for overlapping editorial layouts.",
+    "No placeholder URLs for images. Use only the provided image_urls."
   ]
 }
