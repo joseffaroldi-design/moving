@@ -670,4 +670,22 @@ profile_id = auth.uid(). Legacy tables present (columns unknown → preflight): 
   Parts A/B/C/E included. AWAITING owner to run Part A → B → C and paste results.
 - HOLD: mobile frontend NOT wired until 0027 applied + Part C verified (mirrors portal 0026 sequence).
 
+### Slice 1 FRONTEND (2026-06, BUILT; tsc + build + fixtures + unauth PASS; owner acceptance pending)
+Wired /mobile jobs to 0027 (assumes owner applied 0027; reads gracefully error if not).
+- NEW `src/lib/crewLogic.js` (pure: isNotCrewError, crewErrorMessage, crewRoleLabel) +
+  `src/lib/crewLogic.test.mjs` (3 fixture tests, PASS via node --test).
+- NEW `src/lib/crew.ts` (typed service: crewListJobs(scope,limit,offset), crewGetJob(id); 2 RPCs only).
+- NEW `src/components/mobile/CrewStates.tsx` (CrewNotAuthorized state).
+- REWROTE `src/app/mobile/jobs/page.tsx` (was mvp-dashboard server comp → client; Active/Completed
+  tabs; cards show job#, status, role, schedule, route, customer name/phone, crew_size, truck_count;
+  loading/empty/error/not-crew states). DELETED `src/app/mobile/jobs/JobsClient.tsx`.
+- NEW `src/app/mobile/jobs/[id]/page.tsx` (detail: status/role/schedule/route + tap-to-call customer
+  + dispatch notes + crew roster w/ "(You)"; not-assigned → "This job isn't assigned to you").
+- Route→RPC: /mobile/jobs → crew_list_jobs; /mobile/jobs/[id] → crew_get_job. No base-table reads.
+- Verified: tsc PASS; yarn build PASS (routes emitted); crew fixtures 3/3 PASS; unauth /mobile/jobs
+  + /mobile/jobs/[id] → 307 /login. Owner runbook: PHASE9_P2_slice1_crew_jobs_owner_test_runbook.md.
+- STOP after Slice 1 checkpoint. Do NOT author/run 0028 until owner reviews. Later slices unchanged
+  (0028 clock, 0029 status/checklist, 0030 photos [add job_photos.storage_path], 0031 signatures
+  [document_signatures INCOMPATIBLE — report before any new table]).
+
 
