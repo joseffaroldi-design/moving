@@ -1,5 +1,23 @@
 # Southern Magnolia Movers — Changelog
 
+## 2026-06 — Public Estimate Intake: ACTIVATED (flag ON) — LIVE E2E BLOCKED BY CORS ALLOWLIST
+
+- Set `NEXT_PUBLIC_ESTIMATE_INTAKE_ENABLED=true` in `frontend/.env` (public URL + anon key
+  present; NO service-role key exposed). Rebuilt (`next build` clean, types pass, 20/20 static
+  pages; only pre-existing unrelated @supabase/supabase-js Edge Runtime warning) + restarted frontend.
+- Live browser submit (LiveIntakeZZ / DoNotKeep / 5045550199) fired the integration path
+  (confirms flag ON), but the Edge Function CORS preflight rejected the PREVIEW origin
+  `https://magnolia-movers-rc1.preview.emergentagent.com`:
+  "blocked by CORS policy: Response to preflight request doesn't pass access control check:
+   It does not have HTTP ok status." → net::ERR_FAILED.
+- Because the OPTIONS **preflight** failed, the POST NEVER reached the server → **ZERO
+  customer/lead/activity_log/idempotency rows created. No cleanup required.**
+- Client behaved correctly on failure: safe fallback error, values preserved, call/text CTA,
+  NO SQL/RPC/stack/internal detail exposed.
+- OWNER ACTION REQUIRED (not done by agent — Edge Function is owner-owned): add the preview
+  origin to the Edge Function's origin allowlist, OR run the live E2E from an already-allowlisted
+  production domain. No Edge Function/SQL/RLS changes were made by the agent.
+
 ## 2026-06 — Public Estimate Intake: Frontend validation + tests — COMPLETE & VERIFIED
 
 Finalized the frontend integration (feature flag stays OFF in committed env; deploy owner-gated).
