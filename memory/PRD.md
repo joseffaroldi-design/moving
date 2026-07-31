@@ -651,8 +651,23 @@ profile_id = auth.uid(). Legacy tables present (columns unknown → preflight): 
    + owner runbook). No passwords/JWTs/service-role/customer data.
 
 ### Status
-- Authored READ-ONLY `preflight_0027_crew_mobile_schema.sql` (inventories the 7 crew tables +
-  columns/FKs/RLS/policies/grants/row-counts + crew functions + job_status/user_role enums +
-  job-photo storage bucket & storage.objects policies).
-- HOLD: do NOT author/run migration 0027 until the owner returns the full preflight JSON.
+- Authored READ-ONLY `preflight_0027_crew_mobile_schema.sql`; owner ran it (2026-06). Findings:
+  - job_crew(job_id, profile_id, role); jobs/job_crew/job_photos/job_checklists/job_status_events
+    RLS FORCED + staff-only SELECT (crew cannot read directly → RPCs required). Roles crew_lead/mover.
+  - crew_time_entries: RLS enabled (not forced) + self_insert/self_or_manager_update/company_select
+    policies EXIST, but NO authenticated table grant (locked) → 0028 will route via SECURITY DEFINER RPCs.
+  - job_photos: NO storage-path column (only nullable document_id→documents). 0030 must ADD a
+    storage_path column (or adopt a strict path convention) for the private `job-photos` bucket.
+  - document_signatures: document_id NOT NULL → documents.id; NO job_id, NO crew attribution.
+    INCOMPATIBLE with crew job-completion signatures as-is → per owner decision #3, STOP & report
+    the mismatch at the 0031 signatures slice before creating any new table.
+  - storage bucket `job-photos` PRIVATE + storage.objects policies (authenticated select/insert) exist.
+  - Only existing crew fn = set_job_crew (no name collisions).
+- Authored `0027_crew_mobile_access.sql` (Slice 1, READ-ONLY): `_crew_current_profile()` resolver
+  (auth.uid → active crew_lead/mover + company; no client EXECUTE) + `crew_list_jobs(scope,limit,
+  offset)` + `crew_get_job(job_id)`. Explicit customer-safe + operational fields (schedule/route +
+  dispatch_notes + customer name/phone + crew roster); EXCLUDES internal_notes/financials/email.
+  Parts A/B/C/E included. AWAITING owner to run Part A → B → C and paste results.
+- HOLD: mobile frontend NOT wired until 0027 applied + Part C verified (mirrors portal 0026 sequence).
+
 
