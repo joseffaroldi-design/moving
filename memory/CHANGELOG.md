@@ -1,5 +1,26 @@
 # Southern Magnolia Movers — Changelog
 
+## 2026-06 — Public Estimate Intake: Frontend validation + tests — COMPLETE & VERIFIED
+
+Finalized the frontend integration (feature flag stays OFF in committed env; deploy owner-gated).
+- `frontend/src/lib/estimateValidation.ts` — zod schema mirroring server bounds
+  (required first/last name ≤80, email OR phone required, email/phone format,
+  move-type enum, move-date within today..+2yr). Authoritative validation stays server-side.
+- `frontend/src/components/marketing/EstimateForm.tsx` — client validation + focus-first-error,
+  double-submit guard (ref), honeypot short-circuit, loading/disabled states, ARIA
+  (aria-invalid/aria-describedby, role=status success region), graceful failure + call/text fallback.
+- Tests (plain Node .mjs, NO new deps; real TS transpiled via installed `typescript`):
+  - `src/lib/__tests__/estimateValidation.test.mjs` — 19/19 pass (schema rules).
+  - `src/lib/__tests__/publicIntake.test.mjs` — 16/16 pass (flag ON via env override + mocked
+    fetch: success, server field errors, malformed/network fallback, no company_id/key_hash/
+    payload_hash leakage, honeypot + idempotency_key in body, missing-config fallback).
+- Build: `next build` clean, types valid, 20 pages generated (~32s).
+- Live UX (frontend testing agent, flag OFF placeholder mode): 12/12 pass — render, required
+  errors, contact rule, invalid email/phone/date, valid submit → success with ZERO network,
+  edit restores values, honeypot hidden, tab order, focus-to-success, mobile 375px.
+- Note: `yarn build` against the running `next start` server briefly caused a stale chunk-hash
+  400; resolved by `supervisorctl restart frontend`. Frontend now serves a consistent build.
+
 ## 2026-06 — Public Estimate Intake (security-first) — CODE COMPLETE, OWNER-GATED DEPLOY
 
 Approved architecture: Browser → Edge Function `public-estimate-intake` →
