@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Phone, ArrowRight, CheckCircle2, Pencil, Loader2 } from "lucide-react";
 import { BRAND } from "@/lib/brand";
 import { cn } from "@/lib/utils";
@@ -10,25 +10,20 @@ import {
   INTAKE_ENABLED,
   type EstimatePayload,
 } from "@/lib/publicIntake";
+import {
+  validateEstimate,
+  MOVE_TYPES,
+  type EstimateFormValues,
+} from "@/lib/estimateValidation";
 
 // Behavior:
-//  - INTAKE_ENABLED = false (default): frontend-only. Shows a local success
-//    state that prompts a call/text (no data is saved, no false "saved" claim).
-//  - INTAKE_ENABLED = true (after the Edge Function is deployed): submits to the
-//    secure public intake endpoint and shows success ONLY after the server
-//    confirms persistence; on failure it keeps the entered values, shows an
-//    error, and offers the call/text fallback. Double submits are blocked
-//    client-side (button + ref guard) AND server-side (DB idempotency).
-type EstimateValues = {
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone: string;
-  moveType: string;
-  moveDate: string;
-};
-
-const EMPTY: EstimateValues = {
+//  - INTAKE_ENABLED=false (default): frontend-only. On a valid form it shows a
+//    local success state that prompts a call/text (no data saved; no false
+//    "saved" claim). The browser NEVER sends key_hash/payload_hash/company_id.
+//  - INTAKE_ENABLED=true: submits business fields to the secure Edge Function,
+//    which owns hashing, idempotency, and tenant resolution. Success shows ONLY
+//    after the server confirms; failures keep entered values + call/text fallback.
+const EMPTY: EstimateFormValues = {
   firstName: "",
   lastName: "",
   email: "",
@@ -37,20 +32,12 @@ const EMPTY: EstimateValues = {
   moveDate: "",
 };
 
-const MOVE_TYPES = [
-  "Residential Moving",
-  "Commercial Moving",
-  "Packing Services",
-  "Specialty Items",
-  "Local Moving",
-  "Long-Distance",
-];
-
 const fieldCls =
   "h-11 w-full rounded-sm border border-navy/15 bg-white px-3.5 text-sm text-navy placeholder:text-navy/40 transition-colors focus:border-gold focus:outline-none focus:ring-1 focus:ring-gold";
+const errCls = "border-red-400 focus:border-red-400 focus:ring-red-400";
 
 export function EstimateForm() {
-  const [values, setValues] = useState<EstimateValues>(EMPTY);
+  const [values, setValues] = useState<EstimateFormValues>(EMPTY);
   const [submitted, setSubmitted] = useState(false);
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -59,23 +46,50 @@ export function EstimateForm() {
 
   const savingRef = useRef(false);
   const idemRef = useRef("");
+  const formRef = useRef<HTMLFormElement>(null);
+  const successRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (submitted) successRef.current?.focus();
+  }, [submitted]);
 
   const set =
-    (key: keyof EstimateValues) =>
-    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
-      setValues((v) => ({ ...v, [key]: e.target.value }));
+    (key: keyof EstimateFormValues) =>
+    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+      const v = e.target.value;
+      setValues((s) => ({ ...s, [key]: v }));
+      setFieldErrors((fe) => {
+        if (!fe[key] && !fe.contact) return fe;
+        const next = { ...fe };
+        delete next[key];
+        if (key === "email" || key === "phone") delete next.contact;
+        return next;
+      });
+    };
+
+  const err = (k: string) => fieldErrors[k];
+  const describedBy = (k: string) => (err(k) ? `est-err-${k}` : undefined);
+
+  function focusFirstError() {
+    requestAnimationFrame(() => {
+      const el = formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]');
+      el?.focus();
+    });
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (savingRef.current) return;
     setErrorMsg(null);
-    setFieldErrors({});
 
-    // Frontend-only mode (endpoint not yet enabled): keep existing behavior.
-    if (!INTAKE_ENABLED) {
-      setSubmitted(true);
+    // Client validation mirrors server bounds (server stays authoritative).
+    const { ok, errors } = validateEstimate(values);
+    if (!ok) {
+      setFieldErrors(errors);
+      focusFirstError();
       return;
     }
+    setFieldErrors({});
 
     // Honeypot: silently "succeed" without doing anything.
     if (honeypot.trim() !== "") {
@@ -83,14 +97,9 @@ export function EstimateForm() {
       return;
     }
 
-    // Minimal client-side validation before hitting the network.
-    const errs: Record<string, string> = {};
-    if (!values.firstName.trim()) errs.first_name = "Enter your first name.";
-    if (!values.lastName.trim()) errs.last_name = "Enter your last name.";
-    if (!values.email.trim() && !values.phone.trim())
-      errs.contact = "Add a phone number or email so we can reach you.";
-    if (Object.keys(errs).length) {
-      setFieldErrors(errs);
+    // Frontend-only mode: keep placeholder behavior (no network, no data).
+    if (!INTAKE_ENABLED) {
+      setSubmitted(true);
       return;
     }
 
@@ -98,6 +107,7 @@ export function EstimateForm() {
     savingRef.current = true;
     setSaving(true);
     try {
+      // Browser submits ONLY business fields. No key_hash / payload_hash / company_id.
       const payload: EstimatePayload = {
         first_name: values.firstName.trim(),
         last_name: values.lastName.trim(),
@@ -109,10 +119,23 @@ export function EstimateForm() {
       const res = await submitEstimate(payload, idemRef.current);
       if (res.ok) {
         setSubmitted(true);
-        idemRef.current = newIdempotencyKey(); // fresh key for any next request
+        idemRef.current = newIdempotencyKey();
       } else {
         setErrorMsg(res.message);
-        setFieldErrors(res.errors ?? {});
+        if (res.errors) {
+          // Map server field keys (snake_case) to our camelCase where possible.
+          const map: Record<string, string> = {
+            first_name: "firstName",
+            last_name: "lastName",
+            email: "email",
+            phone: "phone",
+            contact: "contact",
+          };
+          const mapped: Record<string, string> = {};
+          for (const [k, v] of Object.entries(res.errors)) mapped[map[k] ?? k] = v;
+          setFieldErrors(mapped);
+          focusFirstError();
+        }
       }
     } finally {
       savingRef.current = false;
@@ -122,7 +145,14 @@ export function EstimateForm() {
 
   if (submitted) {
     return (
-      <div data-testid="estimate-success" className="text-center">
+      <div
+        ref={successRef}
+        tabIndex={-1}
+        role="status"
+        aria-live="polite"
+        data-testid="estimate-success"
+        className="text-center focus:outline-none"
+      >
         <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-gold/50 bg-navy">
           <CheckCircle2 className="h-7 w-7 text-gold" strokeWidth={1.5} />
         </div>
@@ -153,69 +183,70 @@ export function EstimateForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} data-testid="estimate-form" className="space-y-4" noValidate>
+    <form ref={formRef} onSubmit={handleSubmit} data-testid="estimate-form" className="space-y-4" noValidate>
       {/* Honeypot — visually hidden; real users never fill this. */}
       <div aria-hidden="true" className="pointer-events-none absolute -left-[9999px] h-0 w-0 overflow-hidden">
         <label>
           Company website
-          <input
-            type="text"
-            tabIndex={-1}
-            autoComplete="off"
-            value={honeypot}
-            onChange={(e) => setHoneypot(e.target.value)}
-          />
+          <input type="text" tabIndex={-1} autoComplete="off" value={honeypot} onChange={(e) => setHoneypot(e.target.value)} />
         </label>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
           <input
-            required
             value={values.firstName}
             onChange={set("firstName")}
             placeholder="First Name"
             aria-label="First name"
-            className={cn(fieldCls, fieldErrors.first_name && "border-red-400 focus:border-red-400 focus:ring-red-400")}
+            aria-invalid={!!err("firstName")}
+            aria-describedby={describedBy("firstName")}
+            className={cn(fieldCls, err("firstName") && errCls)}
             data-testid="estimate-first-name"
           />
-          {fieldErrors.first_name && (
-            <p className="mt-1 text-xs text-red-600">{fieldErrors.first_name}</p>
-          )}
+          {err("firstName") && <p id="est-err-firstName" className="mt-1 text-xs text-red-600">{err("firstName")}</p>}
         </div>
         <div>
           <input
-            required
             value={values.lastName}
             onChange={set("lastName")}
             placeholder="Last Name"
             aria-label="Last name"
-            className={cn(fieldCls, fieldErrors.last_name && "border-red-400 focus:border-red-400 focus:ring-red-400")}
+            aria-invalid={!!err("lastName")}
+            aria-describedby={describedBy("lastName")}
+            className={cn(fieldCls, err("lastName") && errCls)}
             data-testid="estimate-last-name"
           />
-          {fieldErrors.last_name && (
-            <p className="mt-1 text-xs text-red-600">{fieldErrors.last_name}</p>
-          )}
+          {err("lastName") && <p id="est-err-lastName" className="mt-1 text-xs text-red-600">{err("lastName")}</p>}
         </div>
-        <input
-          type="email"
-          value={values.email}
-          onChange={set("email")}
-          placeholder="Email"
-          aria-label="Email"
-          className={cn(fieldCls, fieldErrors.email && "border-red-400 focus:border-red-400 focus:ring-red-400")}
-          data-testid="estimate-email"
-        />
-        <input
-          type="tel"
-          required
-          value={values.phone}
-          onChange={set("phone")}
-          placeholder="Phone"
-          aria-label="Phone"
-          className={fieldCls}
-          data-testid="estimate-phone"
-        />
+        <div>
+          <input
+            type="email"
+            value={values.email}
+            onChange={set("email")}
+            placeholder="Email"
+            aria-label="Email"
+            aria-invalid={!!err("email")}
+            aria-describedby={describedBy("email")}
+            className={cn(fieldCls, err("email") && errCls)}
+            data-testid="estimate-email"
+          />
+          {err("email") && <p id="est-err-email" className="mt-1 text-xs text-red-600">{err("email")}</p>}
+        </div>
+        <div>
+          <input
+            type="tel"
+            value={values.phone}
+            onChange={set("phone")}
+            placeholder="Phone"
+            aria-label="Phone"
+            aria-invalid={!!err("phone")}
+            aria-describedby={describedBy("phone")}
+            className={cn(fieldCls, err("phone") && errCls)}
+            data-testid="estimate-phone"
+          />
+          {err("phone") && <p id="est-err-phone" className="mt-1 text-xs text-red-600">{err("phone")}</p>}
+        </div>
         <select
           value={values.moveType}
           onChange={set("moveType")}
@@ -230,27 +261,29 @@ export function EstimateForm() {
             </option>
           ))}
         </select>
-        <input
-          type="date"
-          value={values.moveDate}
-          onChange={set("moveDate")}
-          aria-label="Move date"
-          className={cn(fieldCls, !values.moveDate && "text-navy/40")}
-          data-testid="estimate-move-date"
-        />
+        <div>
+          <input
+            type="date"
+            value={values.moveDate}
+            onChange={set("moveDate")}
+            aria-label="Move date"
+            aria-invalid={!!err("moveDate")}
+            aria-describedby={describedBy("moveDate")}
+            className={cn(fieldCls, !values.moveDate && "text-navy/40", err("moveDate") && errCls)}
+            data-testid="estimate-move-date"
+          />
+          {err("moveDate") && <p id="est-err-moveDate" className="mt-1 text-xs text-red-600">{err("moveDate")}</p>}
+        </div>
       </div>
 
-      {fieldErrors.contact && (
-        <p className="text-xs text-red-600" data-testid="estimate-contact-error">
-          {fieldErrors.contact}
+      {err("contact") && (
+        <p id="est-err-contact" className="text-xs text-red-600" data-testid="estimate-contact-error">
+          {err("contact")}
         </p>
       )}
 
       {errorMsg && (
-        <div
-          data-testid="estimate-error"
-          className="rounded-sm border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700"
-        >
+        <div role="alert" data-testid="estimate-error" className="rounded-sm border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
           {errorMsg}{" "}
           <a href={BRAND.phoneHref} className="font-semibold underline">
             Call or text {BRAND.phone}
@@ -262,6 +295,7 @@ export function EstimateForm() {
       <button
         type="submit"
         disabled={saving}
+        aria-busy={saving}
         data-testid="estimate-submit-btn"
         className="group inline-flex w-full items-center justify-center gap-2 rounded-sm bg-gold px-6 py-4 text-sm font-semibold uppercase tracking-wide text-navy transition-colors duration-300 hover:bg-gold-hover disabled:cursor-not-allowed disabled:opacity-70"
       >
