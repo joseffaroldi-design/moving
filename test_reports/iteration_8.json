@@ -1,0 +1,39 @@
+{
+  "summary": "Public Estimate Intake frontend integration verified on live homepage (flag OFF placeholder mode). All 12 UX/validation/accessibility scenarios pass. Initial run surfaced a stale Next.js chunk (page-ae5aa8ae0f17739e.js -> 400) causing hydration to fail; a `sudo supervisorctl restart frontend` reloaded the fresh build (page-f831e4e4f0c76565.js) and all subsequent tests passed.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "tests_executed": [
+    {"id": "T1_render", "result": "PASS", "detail": "estimate-form + all 7 fields (first/last name, email, phone, move-type, move-date, submit) render on '/'."},
+    {"id": "T2_empty_submit", "result": "PASS", "detail": "aria-invalid=true on firstName & lastName; #est-err-firstName and #est-err-lastName rendered; focus moved to estimate-first-name."},
+    {"id": "T3_contact_rule", "result": "PASS", "detail": "With names filled but email+phone empty, estimate-contact-error shows 'Add a phone number or email so we can reach you.'"},
+    {"id": "T4_invalid_email", "result": "PASS", "detail": "'notanemail' -> 'Please enter a valid email address.' with aria-invalid=true and aria-describedby=est-err-email."},
+    {"id": "T5_invalid_phone", "result": "PASS", "detail": "'123' -> 'Please enter a valid phone number.'"},
+    {"id": "T6_past_date", "result": "PASS", "detail": "2020-01-01 -> 'Please choose a date within the next two years.'"},
+    {"id": "T7_valid_submit_no_network", "result": "PASS", "detail": "Valid submit transitions to estimate-success (role=status, aria-live=polite, tabindex=-1). estimate-success-call-btn and estimate-edit-btn rendered. ZERO network calls to supabase/functions/api endpoints — flag-OFF placeholder confirmed."},
+    {"id": "T8_edit_restores", "result": "PASS", "detail": "'Edit my details' returns to form with values preserved (John / Doe / john@example.com)."},
+    {"id": "T9_honeypot_hidden", "result": "PASS", "detail": "'Company website' input: tabIndex=-1, positioned left:-8999px, wrapped in aria-hidden=true container; NOT in normal tab order."},
+    {"id": "T10_tab_order", "result": "PASS", "detail": "Tab sequence: first-name -> last-name -> email -> phone -> move-type -> move-date (multiple segments per native date input). Honeypot skipped."},
+    {"id": "T11_focus_success", "result": "PASS", "detail": "After valid submit, document.activeElement is estimate-success (auto-focus via useEffect)."},
+    {"id": "T12_mobile_375", "result": "PASS", "detail": "At 375px viewport: no horizontal overflow, fields stack (grid-cols-1), form fully visible & usable."}
+  ],
+  "test_report_links": [],
+  "action_items": [
+    "INVESTIGATE: On the live preview URL, stale Next.js chunk references (page-<hash>.js) returned 400 after code changes without a supervisor restart. HTML head was cached/served referencing an old chunk hash while disk had a newer one. A `next start` server should self-update after a fresh build; the current supervisor setup may be running `next start` against a build produced BEFORE the server was launched last (or a build was regenerated after startup). Recommendation: ensure `yarn build` runs immediately before `supervisorctl restart frontend`, OR switch preview to `next dev` for iterative testing, OR add a post-build supervisor restart hook. Without this, users can silently see a non-hydrated (dead) form."
+  ],
+  "critical_code_review_comments": [
+    "EstimateForm.tsx: Focus-management on validation failure uses requestAnimationFrame + querySelector('[aria-invalid=true]') — works reliably here, but note the `select` (move-type) does not set aria-invalid on error (there is no err() check on it) — currently OK because moveType only errors on enum mismatch (impossible from the UI), but if server-driven errors ever set fieldErrors.moveType, focusFirstError() won't land on the select. Low priority.",
+    "middleware.ts: matcher correctly excludes _next/static; not a source of the 400 seen. The AuthApiError 'refresh_token_not_found' in frontend logs is expected/benign for anonymous visitors but is noisy — consider swallowing that specific code to reduce log noise."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped per request)", "frontend": "100% (12/12)"},
+  "test_credentials": "none (public anonymous flow)",
+  "seed_data_creation": "none",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "EstimateForm on homepage '/' works end-to-end in flag-OFF mode. If tests appear to 'not react' to clicks, check for stale Next.js chunk hashes: `curl -sI http://localhost:3000/_next/static/chunks/app/page-<hash>.js` — a 400 means restart frontend via supervisor. NEXT_PUBLIC_ESTIMATE_INTAKE_ENABLED remained OFF; do not enable.",
+  "rca of the issue": "Initial UI test showed no validation errors on empty submit because the client bundle failed to load (chunk 400 -> MIME text/html -> browser refused). Root cause: HTML served by `next start` referenced page-ae5aa8ae0f17739e.js but disk .next/static/chunks/app contained page-f831e4e4f0c76565.js — build hash drift between the running server's manifest and the on-disk chunk directory. Mitigation applied: `sudo supervisorctl restart frontend`. Preventive fix (main agent): make sure the process reads a stable build (build before start; avoid re-building while server runs), or use `next dev`."
+}
