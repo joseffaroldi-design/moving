@@ -1,5 +1,41 @@
 # Southern Magnolia Movers — Changelog
 
+## 2026-06 — Public Estimate Intake (security-first) — CODE COMPLETE, OWNER-GATED DEPLOY
+
+Approved architecture: Browser → Edge Function `public-estimate-intake` →
+service-role-only atomic RPC `create_public_lead(jsonb)` → minimal generic
+response. `anon` gains NOTHING; no existing RLS/auth/role/table modified.
+
+Delivered (all build-verified; deploy is owner-gated — agent cannot run SQL/deploy):
+- `supabase/migrations/preflight_0029_public_estimate_intake.sql` — READ-ONLY Part A
+  (single compact JSON report; STOP conditions for created_by nullability, actor_role,
+  triggers, name collision, single business_profile).
+- `supabase/migrations/0029_public_estimate_intake.sql` — write migration (owner-run).
+  Adds `public_intake_idempotency` (service-owned, RLS, no client grant) + SECURITY
+  DEFINER `create_public_lead(jsonb)` granted to `service_role` ONLY. Atomic
+  customer+lead (status 'new', source 'website', created_by NULL) + one activity_log
+  audit row (actor_id NULL, actor_role 'public', no PII values). Tenant resolved
+  in-function via the documented constant (0028 skipped — reserved for Crew Mobile).
+- `supabase/functions/public-estimate-intake/index.ts` — origin-allowlist CORS,
+  OPTIONS, POST-only, JSON-only, 8KB cap, strict allowlist+validation+normalization,
+  honeypot, Deno KV best-effort rate limiting (fail-open, documented), DB-enforced
+  idempotency (sha256 key_hash), request timeout, generic errors, no PII/secret logs.
+- `frontend/src/lib/publicIntake.ts` + `EstimateForm.tsx` wired behind
+  `NEXT_PUBLIC_ESTIMATE_INTAKE_ENABLED` (default OFF → homepage behavior unchanged).
+  When ON: success only after server confirm, values preserved on failure, honeypot,
+  client double-click guard, call/text fallback.
+- Docs: `/app/docs/PUBLIC_ESTIMATE_INTAKE_PREFLIGHT.md` (design + threat model),
+  `/app/docs/PUBLIC_ESTIMATE_INTAKE_ACTIVATION.md` (owner runbook).
+
+Field-mapping (base tables unaltered): city+zip → composed origin/destination
+addresses; move_type/home_size/services/notes → structured plain-text `leads.notes`
+block (React-escaped; not executable). Behavior: one new customer + one new lead
+per request; no weak email/phone merge; atomic; no orphans.
+
+Next (owner): run preflight → apply 0029 → deploy function → set flag → verify.
+
+
+
 ## 2026-06 — Public Marketing Homepage Redesign (P0) — COMPLETE & VERIFIED
 
 Complete premium, NOLA-themed redesign of the public homepage at route `/`.
