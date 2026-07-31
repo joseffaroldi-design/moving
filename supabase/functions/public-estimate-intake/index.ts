@@ -214,9 +214,20 @@ Deno.serve(async (req) => {
   if (notes) lines.push("", "Customer notes:", notes);
   const composedNotes = lines.join("\n").slice(0, 4000);
 
-  // Idempotency: hash the client token (raw token never stored/logged).
-  const idemRaw = clean(body["idempotency_key"], 64);
-  const keyHash = idemRaw ? await sha256Hex(idemRaw) : "";
+  // Idempotency: the Edge Function is the trusted hasher. Always produce a valid
+  // 64-hex key (fallback to a random token if the client omitted one) and a
+  // payload_hash over a CANONICAL, fixed-order projection of the NORMALIZED
+  // fields that define the request. Raw token/payload are never stored or logged.
+  //   Canonical fields (in this exact order):
+  //     first_name, last_name, email, phone, move_type,
+  //     origin_address, destination_address, move_date, notes
+  const idemRaw = clean(body["idempotency_key"], 64) || crypto.randomUUID();
+  const keyHash = await sha256Hex(idemRaw);
+  const canonical = JSON.stringify([
+    first, last, email, phone, moveType,
+    originAddress, destAddress, moveDate, composedNotes,
+  ]);
+  const payloadHash = await sha256Hex(canonical);
 
   // Best-effort rate limiting (Deno KV). Fail-open if KV is unavailable.
   let kv: Deno.Kv | null = null;
@@ -231,7 +242,7 @@ Deno.serve(async (req) => {
     move_date: moveDate, origin_address: originAddress, destination_address: destAddress,
     notes: composedNotes, move_type: moveType,
     utm_source: utm.source, utm_medium: utm.medium, utm_campaign: utm.campaign,
-    key_hash: keyHash,
+    key_hash: keyHash, payload_hash: payloadHash,
   };
 
   const ac = new AbortController();

@@ -1,142 +1,194 @@
 -- =====================================================================
--- 0029_public_estimate_intake.sql
+-- 0029_public_estimate_intake.sql   (HARDENED — rev 2)
 -- Southern Magnolia Movers — PUBLIC ESTIMATE INTAKE (write migration).
--- OWNER-EXECUTED ONLY. The author does NOT run this. Additive & idempotent.
+-- OWNER-EXECUTED ONLY. Additive. (0028 skipped — reserved for Crew Mobile P2.)
 --
--- (0028 intentionally skipped — reserved for Crew Mobile P2.)
+-- Preflight preflight_0029 confirmed (live): customers/leads.created_by NULLABLE
+-- (FK -> profiles ON DELETE SET NULL), activity_log.actor_id NULLABLE,
+-- actor_role free-text (no check), lead_status has 'new', no INSERT triggers
+-- (only BEFORE UPDATE set_updated_at), no name collision, single business_profile
+-- row, RLS enabled but NOT forced (postgres-owned DEFINER bypasses RLS to insert).
 --
--- WHAT THIS ADDS (nothing existing is modified):
---   1. public.public_intake_idempotency  — service-owned claim table (DB-enforced
---      idempotency; no client grant, RLS enabled, owner-only writes).
---   2. public.create_public_lead(jsonb)   — SECURITY DEFINER RPC that, in ONE
---      atomic transaction: claims the idempotency key, inserts one customer +
---      one lead (status 'new', source 'website', created_by NULL) and one
---      activity_log audit row. Granted EXECUTE to service_role ONLY.
+-- NOTHING existing is modified: no base-table column/RLS policy/staff RPC/grant
+-- is changed. This migration only ADDS one table + one function.
 --
--- TRUST MODEL
---   * anon / authenticated / public : gain NOTHING (no table grant, no execute).
---   * The Edge Function `public-estimate-intake` calls this RPC with the
---     service-role key. The browser never reaches this function or these tables.
---   * company_id is resolved INSIDE this function (never a client argument),
---     never returned. Client cannot set status/assignment/pricing/company/owner.
---   * created_by is NULL (no signed-in user); mirrors create_lead_with_customer
---     otherwise. Requires customers.created_by / leads.created_by to be NULLABLE
---     and activity_log.actor_id NULLABLE + actor_role free-text — ALL confirmed
---     by preflight_0029_public_estimate_intake.sql (run Part A first).
---
--- RUN ORDER: run preflight_0029 (READ-ONLY) FIRST, confirm no STOP condition,
---            then Part B here. Part C verifies. Part D rolls back.
+-- CHANGE LOG vs rev 1:
+--   #1 Requires the idempotency table + function to be ABSENT (hard guard +
+--      plain CREATE, not "if not exists").
+--   #2 key_hash is MANDATORY and must be 64 lowercase hex (sha256). No blank
+--      bypass — the function cannot create a lead without claiming a valid key.
+--   #3 Adds payload_hash. Same key + same payload -> 'duplicate' (idempotent);
+--      same key + different payload -> controlled 'idempotency_conflict'.
+--   #4 Full bounded, defense-in-depth validation of every stored field.
+--   #5 Audit metadata normalized + length-bounded; NO name/address/phone/email/
+--      notes ever stored in activity_log.
+--   #6/#7 Explicit owner set + exact ACL verification in Part C.
+--   #8 Part C smoke test is fully ROLLBACK-contained (leaves zero data) and uses
+--      64-hex key/payload hashes (never md5). Negative cases included.
+--   #9 Retention defined (owner-run 30-day cleanup; no scheduler dependency).
 -- =====================================================================
 
 
 -- =====================================================================
--- PART A — PREFLIGHT
---   Run the standalone read-only file `preflight_0029_public_estimate_intake.sql`
---   and confirm ALL of:
---     * customers_created_by_nullable = 'YES'
---     * leads_created_by_nullable     = 'YES'
---     * activity_log_actor_id_nullable = 'YES'
---     * activity_log_actor_role.blocks_public = false
---     * customers_notnull_without_default / leads_notnull_without_default hold
---       only columns this function supplies (id/company_id/first_name/last_name/
---       customer_id/status/timestamps)
---     * create_public_lead_conflict = []
---     * no trigger blocks a user-less insert
---     * tenant_business_profile.exactly_one = true
---   If any STOP condition holds, DO NOT run Part B.
+-- PART A — READ-ONLY ABSENCE + PRECONDITION CHECK (run FIRST; expect all clear)
 -- =====================================================================
+select
+  to_regclass('public.public_intake_idempotency') as idempotency_table_regclass,  -- expect NULL (absent)
+  exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+         where n.nspname='public' and p.proname='create_public_lead') as function_exists,  -- expect false
+  (select count(*) from public.business_profile) as business_profile_rows,        -- expect 1
+  exists(select 1 from public.companies
+         where id='f05941f2-13db-4779-a1f3-2d6a74ccffcd') as tenant_company_exists;-- expect true
+-- If idempotency_table_regclass is NOT NULL or function_exists is true, STOP.
 
 
 -- =====================================================================
--- PART B — MIGRATION (single transaction)
+-- PART B — MIGRATION (single transaction). Aborts safely if objects exist.
 -- =====================================================================
 begin;
 
--- B1. DB-enforced idempotency claim table. Owner-written only; no client grant.
-create table if not exists public.public_intake_idempotency (
-  key_hash    text primary key,           -- sha256 hex of the client token
-  created_at  timestamptz not null default now()
+-- B0. Hard guard: require absence (never silently reuse an incompatible object).
+do $$
+begin
+  if to_regclass('public.public_intake_idempotency') is not null then
+    raise exception '0029 ABORT: public.public_intake_idempotency already exists';
+  end if;
+  if exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+             where n.nspname='public' and p.proname='create_public_lead') then
+    raise exception '0029 ABORT: public.create_public_lead already exists';
+  end if;
+end $$;
+
+-- B1. Idempotency claim table (plain CREATE). key_hash + payload_hash, both
+--     enforced to 64 lowercase hex by CHECK. Owner-written only; no client grant.
+create table public.public_intake_idempotency (
+  key_hash     text primary key
+                 constraint public_intake_key_hash_format check (key_hash ~ '^[0-9a-f]{64}$'),
+  payload_hash text not null
+                 constraint public_intake_payload_hash_format check (payload_hash ~ '^[0-9a-f]{64}$'),
+  created_at   timestamptz not null default now()
 );
-create index if not exists public_intake_idempotency_created_idx
+create index public_intake_idempotency_created_idx
   on public.public_intake_idempotency (created_at);
 
--- Lock the table down completely from every client role. The SECURITY DEFINER
--- function (owner=postgres) writes it in owner context; no client grant needed.
-revoke all on table public.public_intake_idempotency from anon, authenticated, public;
+-- Zero client grants: neither browser role nor service_role touches it directly;
+-- only the postgres-owned DEFINER function writes it (in owner context).
+revoke all on table public.public_intake_idempotency from anon, authenticated, public, service_role;
 alter table public.public_intake_idempotency enable row level security;
--- No policy: with RLS enabled + zero client grant, no client can read/write it.
+-- No policy: RLS enabled + zero grant => unreachable by every client role.
 
--- B2. Atomic public intake RPC.
-create or replace function public.create_public_lead(p_payload jsonb)
+-- B2. Atomic, self-validating public intake RPC.
+create function public.create_public_lead(p_payload jsonb)
 returns jsonb
 language plpgsql
 security definer
 set search_path = public, pg_temp
 as $$
 declare
-  -- Single documented source of truth for the tenant. Lives ONLY here (never in
-  -- JS, the Edge Function, or tests). Verified to exist below.
+  -- Single documented tenant source of truth. Lives ONLY here (never in JS/Edge/tests).
   c_company constant uuid := 'f05941f2-13db-4779-a1f3-2d6a74ccffcd';
-  v_company   uuid;
-  v_key_hash  text := nullif(btrim(coalesce(p_payload->>'key_hash','')), '');
-  v_claimed   text;
-  v_first     text := btrim(coalesce(p_payload->>'first_name',''));
-  v_last      text := btrim(coalesce(p_payload->>'last_name',''));
-  v_email     text := nullif(btrim(coalesce(p_payload->>'email','')), '');
-  v_phone     text := nullif(btrim(coalesce(p_payload->>'phone','')), '');
-  v_customer  uuid;
-  v_lead      uuid;
+  c_move_types constant text[] := array[
+    'Residential Moving','Commercial Moving','Packing Services',
+    'Specialty Items','Local Moving','Long-Distance'];
+
+  v_company     uuid;
+  v_key_hash    text := btrim(coalesce(p_payload->>'key_hash',''));
+  v_payload_hash text := btrim(coalesce(p_payload->>'payload_hash',''));
+  v_existing_ph text;
+  v_claimed     text;
+
+  v_first   text := btrim(coalesce(p_payload->>'first_name',''));
+  v_last    text := btrim(coalesce(p_payload->>'last_name',''));
+  v_email   text := nullif(btrim(coalesce(p_payload->>'email','')), '');
+  v_phone   text := nullif(btrim(coalesce(p_payload->>'phone','')), '');
+  v_origin  text := nullif(btrim(coalesce(p_payload->>'origin_address','')), '');
+  v_dest    text := nullif(btrim(coalesce(p_payload->>'destination_address','')), '');
+  v_notes   text := nullif(btrim(coalesce(p_payload->>'notes','')), '');
+  v_cnotes  text := nullif(btrim(coalesce(p_payload->>'customer_notes','')), '');
+  v_mtype   text := nullif(btrim(coalesce(p_payload->>'move_type','')), '');
+  v_mdate_t text := nullif(btrim(coalesce(p_payload->>'move_date','')), '');
+  v_mdate   date;
+
+  v_customer uuid;
+  v_lead     uuid;
 begin
   -- Resolve + assert tenant server-side (never from the client).
   select id into v_company from public.companies where id = c_company;
-  if v_company is null then
-    raise exception 'intake_misconfigured';   -- generic; Edge maps to generic fail
-  end if;
+  if v_company is null then raise exception 'intake_misconfigured'; end if;
 
-  -- Defense-in-depth validation (Edge validates first; re-check the essentials).
-  if v_first = '' or v_last = '' then
-    raise exception 'invalid_name';
-  end if;
-  if v_email is null and v_phone is null then
-    raise exception 'missing_contact';
-  end if;
+  -- ---- Idempotency key format (MANDATORY) ----
+  if v_key_hash !~ '^[0-9a-f]{64}$' then raise exception 'invalid_key_hash'; end if;
+  if v_payload_hash !~ '^[0-9a-f]{64}$' then raise exception 'invalid_payload_hash'; end if;
 
-  -- Atomic idempotency claim. If the key was already used, this is a replay:
-  -- return WITHOUT creating any new customer/lead (no duplicate).
-  if v_key_hash is not null then
-    insert into public.public_intake_idempotency (key_hash)
-    values (v_key_hash)
-    on conflict (key_hash) do nothing
-    returning key_hash into v_claimed;
+  -- ---- Bounded, defense-in-depth field validation ----
+  if v_first = '' or char_length(v_first) > 80 then raise exception 'invalid_first_name'; end if;
+  if v_last  = '' or char_length(v_last)  > 80 then raise exception 'invalid_last_name'; end if;
 
-    if v_claimed is null then
-      return jsonb_build_object('status', 'duplicate');
+  if v_email is not null then
+    if char_length(v_email) > 160 or v_email !~ '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$' then
+      raise exception 'invalid_email';
     end if;
   end if;
 
-  -- One customer (created_by NULL: no signed-in user).
+  if v_phone is not null then
+    if char_length(v_phone) > 40
+       or v_phone !~ '^[+0-9 ().-]+$'
+       or char_length(regexp_replace(v_phone,'[^0-9]','','g')) not between 7 and 15 then
+      raise exception 'invalid_phone';
+    end if;
+  end if;
+
+  if v_email is null and v_phone is null then raise exception 'missing_contact'; end if;
+
+  if v_origin is not null and char_length(v_origin) > 200 then raise exception 'invalid_origin'; end if;
+  if v_dest   is not null and char_length(v_dest)   > 200 then raise exception 'invalid_destination'; end if;
+  if v_notes  is not null and char_length(v_notes)  > 4000 then raise exception 'invalid_notes'; end if;
+  if v_cnotes is not null and char_length(v_cnotes) > 2000 then raise exception 'invalid_customer_notes'; end if;
+
+  if v_mtype is not null and not (v_mtype = any(c_move_types)) then
+    raise exception 'invalid_move_type';
+  end if;
+
+  if v_mdate_t is not null then
+    if v_mdate_t !~ '^\d{4}-\d{2}-\d{2}$' then raise exception 'invalid_move_date'; end if;
+    v_mdate := v_mdate_t::date;
+    if v_mdate < current_date or v_mdate > (current_date + interval '2 years')::date then
+      raise exception 'move_date_out_of_range';
+    end if;
+  end if;
+
+  -- ---- Idempotency claim (BEFORE any write). No claim => no lead. ----
+  insert into public.public_intake_idempotency (key_hash, payload_hash)
+  values (v_key_hash, v_payload_hash)
+  on conflict (key_hash) do nothing
+  returning key_hash into v_claimed;
+
+  if v_claimed is null then
+    select payload_hash into v_existing_ph
+      from public.public_intake_idempotency where key_hash = v_key_hash;
+    if v_existing_ph = v_payload_hash then
+      return jsonb_build_object('status', 'duplicate');   -- true replay
+    else
+      raise exception 'idempotency_conflict';              -- same key, different payload
+    end if;
+  end if;
+
+  -- ---- Atomic customer + lead + audit ----
   insert into public.customers (company_id, created_by, first_name, last_name, email, phone, notes)
-  values (
-    v_company, null, v_first, v_last, v_email, v_phone,
-    nullif(btrim(coalesce(p_payload->>'customer_notes','')), '')
-  )
+  values (v_company, null, v_first, v_last, v_email, v_phone, v_cnotes)
   returning id into v_customer;
 
-  -- One lead (status 'new', source 'website', created_by NULL).
   insert into public.leads (
     company_id, created_by, customer_id, status, source, move_date,
     origin_address, destination_address, notes
   )
   values (
     v_company, null, v_customer, 'new'::public.lead_status, 'website',
-    (nullif(btrim(coalesce(p_payload->>'move_date','')), ''))::date,
-    nullif(btrim(coalesce(p_payload->>'origin_address','')), ''),
-    nullif(btrim(coalesce(p_payload->>'destination_address','')), ''),
-    nullif(btrim(coalesce(p_payload->>'notes','')), '')
+    v_mdate, v_origin, v_dest, v_notes
   )
   returning id into v_lead;
 
-  -- One audit row (no PII values — flags/enums/marketing tags only).
+  -- Audit: minimized + bounded. NO name/address/phone/email/notes.
   insert into public.activity_log (
     company_id, actor_id, actor_email, actor_role, action,
     entity_type, entity_id, summary, metadata
@@ -148,19 +200,23 @@ begin
       'source', 'website',
       'has_email', (v_email is not null),
       'has_phone', (v_phone is not null),
-      'move_type', p_payload->>'move_type',
-      'utm_source', p_payload->>'utm_source',
-      'utm_medium', p_payload->>'utm_medium',
-      'utm_campaign', p_payload->>'utm_campaign'
+      'move_type', v_mtype,   -- already allowlisted or null
+      'utm_source',   left(nullif(btrim(coalesce(p_payload->>'utm_source','')),''),120),
+      'utm_medium',   left(nullif(btrim(coalesce(p_payload->>'utm_medium','')),''),120),
+      'utm_campaign', left(nullif(btrim(coalesce(p_payload->>'utm_campaign','')),''),120)
     )
   );
 
-  -- Never return ids/tenant/dup detail to the caller.
-  return jsonb_build_object('status', 'created');
+  return jsonb_build_object('status', 'created');   -- never returns ids/tenant
 end;
 $$;
 
--- B3. GRANTS — service_role ONLY. anon/authenticated/public get nothing.
+-- B3. Explicit owner (preflight confirmed the reference DEFINER RPC is owned by
+--     postgres, a BYPASSRLS role). The SQL Editor runs as postgres, so this is a
+--     no-op assertion that documents + guarantees the intended owner.
+alter function public.create_public_lead(jsonb) owner to postgres;
+
+-- B4. GRANTS — service_role ONLY. anon/authenticated/PUBLIC get nothing.
 revoke execute on function public.create_public_lead(jsonb) from public, anon, authenticated;
 grant  execute on function public.create_public_lead(jsonb) to service_role;
 
@@ -168,38 +224,125 @@ commit;
 
 
 -- =====================================================================
--- PART C — VERIFICATION (READ-ONLY; run after Part B, paste every result)
+-- PART C — VERIFICATION (READ-ONLY; run after Part B; paste every result)
 -- =====================================================================
--- C1. Function exists, is SECURITY DEFINER, owned by a BYPASSRLS role (postgres).
--- select p.proname, p.prosecdef as security_definer,
---        pg_get_userbyid(p.proowner) as owner
--- from pg_proc p join pg_namespace n on n.oid=p.pronamespace
--- where n.nspname='public' and p.proname='create_public_lead';
 
--- C2. EXECUTE grant is service_role ONLY (expect exactly one row: service_role).
--- select grantee, privilege_type
--- from information_schema.role_routine_grants
--- where routine_schema='public' and routine_name='create_public_lead'
---   and grantee in ('anon','authenticated','public','service_role')
--- order by grantee;
+-- C1. Function: SECURITY DEFINER, owner=postgres (BYPASSRLS), pinned search_path.
+select p.proname,
+       p.prosecdef                                   as security_definer,   -- expect true
+       pg_get_userbyid(p.proowner)                   as owner,              -- expect postgres
+       (select rolbypassrls from pg_roles
+         where rolname = pg_get_userbyid(p.proowner)) as owner_bypassrls,   -- expect true
+       p.proconfig                                    as config             -- expect {search_path=public, pg_temp}
+from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+where n.nspname='public' and p.proname='create_public_lead';
 
--- C3. Idempotency table has NO client grant + RLS enabled.
--- select grantee, privilege_type from information_schema.role_table_grants
--- where table_schema='public' and table_name='public_intake_idempotency';   -- expect no anon/authenticated rows
--- select relrowsecurity from pg_class where oid='public.public_intake_idempotency'::regclass;  -- expect true
+-- C2a. Exact per-role EXECUTE (definitive for real roles).
+select
+  has_function_privilege('anon',          'public.create_public_lead(jsonb)','EXECUTE') as anon_exec,          -- false
+  has_function_privilege('authenticated', 'public.create_public_lead(jsonb)','EXECUTE') as authenticated_exec, -- false
+  has_function_privilege('service_role',  'public.create_public_lead(jsonb)','EXECUTE') as service_role_exec;   -- true
 
--- C4. Functional smoke (run as service_role / via the Edge Function, NOT anon):
---     select public.create_public_lead(jsonb_build_object(
---       'first_name','Test','last_name','Intake','phone','5045550123',
---       'origin_address','New Orleans 70112','destination_address','Metairie 70001',
---       'notes','Move Type: Residential Moving','key_hash', md5(random()::text)));
---     -> {"status":"created"}   (re-running with the SAME key_hash -> {"status":"duplicate"})
---     Confirm one customers row, one leads row (status 'new', source 'website'),
---     one activity_log row (action 'lead.public_intake'), and NO orphan on failure.
---     Remember to delete the test rows afterward.
+-- C2b. Exact ACL inspection incl. PUBLIC (grantee 0). Expect public_execute=false,
+--      and EXECUTE present ONLY for service_role (+ owner).
+select
+  bool_or(a.grantee = 0 and a.privilege_type='EXECUTE')                              as public_execute,        -- false
+  bool_or(coalesce(r.rolname,'') = 'anon'          and a.privilege_type='EXECUTE')   as anon_execute,          -- false
+  bool_or(coalesce(r.rolname,'') = 'authenticated' and a.privilege_type='EXECUTE')   as authenticated_execute, -- false
+  bool_or(coalesce(r.rolname,'') = 'service_role'  and a.privilege_type='EXECUTE')   as service_role_execute   -- true
+from pg_proc p
+join pg_namespace n on n.oid = p.pronamespace
+cross join lateral aclexplode(p.proacl) a
+left join pg_roles r on r.oid = a.grantee
+where n.nspname='public' and p.proname='create_public_lead';
 
--- C5. Negative — anon cannot execute (expect permission denied):
---     set role anon; select public.create_public_lead('{}'::jsonb); reset role;
+-- C3. Idempotency table: RLS on, no policies, no client grants.
+select relrowsecurity as rls_enabled, relforcerowsecurity as rls_forced
+from pg_class where oid='public.public_intake_idempotency'::regclass;              -- rls_enabled=true
+select count(*) as policy_count from pg_policies
+where schemaname='public' and tablename='public_intake_idempotency';               -- expect 0
+select grantee, privilege_type from information_schema.role_table_grants
+where table_schema='public' and table_name='public_intake_idempotency'
+  and grantee in ('anon','authenticated','service_role','PUBLIC');                  -- expect NO rows
+select conname, pg_get_constraintdef(oid) as def from pg_constraint
+where conrelid='public.public_intake_idempotency'::regclass and contype='c';        -- both hex CHECKs
+
+-- C4. ROLLBACK-CONTAINED functional smoke test (leaves ZERO data).
+--     64-hex key/payload hashes (never md5). Uses unique marker names.
+begin;
+  -- (1) first call -> created
+  select public.create_public_lead(jsonb_build_object(
+    'first_name','PreflightZZ','last_name','DoNotKeep','phone','5045550123',
+    'origin_address','New Orleans 70112','destination_address','Metairie 70001',
+    'move_type','Residential Moving','notes','— Website Estimate Request —',
+    'key_hash',    repeat('a',64),
+    'payload_hash',repeat('b',64))) as call_1;   -- expect {"status":"created"}
+
+  -- (2) same key + same payload -> duplicate (no new rows)
+  select public.create_public_lead(jsonb_build_object(
+    'first_name','PreflightZZ','last_name','DoNotKeep','phone','5045550123',
+    'origin_address','New Orleans 70112','destination_address','Metairie 70001',
+    'move_type','Residential Moving','notes','— Website Estimate Request —',
+    'key_hash',    repeat('a',64),
+    'payload_hash',repeat('b',64))) as call_2;   -- expect {"status":"duplicate"}
+
+  -- (3) counts inside the txn: exactly one of each
+  select
+    (select count(*) from public.customers c
+       where c.first_name='PreflightZZ' and c.last_name='DoNotKeep')                  as customers_created,   -- 1
+    (select count(*) from public.leads l join public.customers c on c.id=l.customer_id
+       where c.first_name='PreflightZZ' and c.last_name='DoNotKeep'
+         and l.source='website' and l.status='new')                                  as leads_created,       -- 1
+    (select count(*) from public.public_intake_idempotency where key_hash=repeat('a',64)) as idempotency_claims, -- 1
+    (select count(*) from public.activity_log
+       where action='lead.public_intake'
+         and entity_id in (select l.id::text from public.leads l
+                             join public.customers c on c.id=l.customer_id
+                             where c.first_name='PreflightZZ'))                        as audit_rows;          -- 1
+rollback;
+-- Post-rollback (optional): confirm nothing persisted.
+-- select count(*) from public.customers where first_name='PreflightZZ';  -- expect 0
+
+-- C5. NEGATIVE cases — each must be REJECTED (no rows). Exception-captured so it
+--     leaves zero data and does not abort your session.
+do $$
+declare
+  base jsonb := jsonb_build_object('first_name','NegZZ','last_name','DoNotKeep','phone','5045550123',
+                                   'key_hash',repeat('c',64),'payload_hash',repeat('d',64));
+  procname text;
+begin
+  -- missing key hash
+  begin perform public.create_public_lead(base - 'key_hash');
+        raise notice 'MISSING_KEY: NOT rejected (BAD)';
+  exception when others then raise notice 'MISSING_KEY: rejected -> %', sqlerrm; end;
+  -- malformed key hash (not 64 hex)
+  begin perform public.create_public_lead(jsonb_set(base,'{key_hash}','"XYZ"'));
+        raise notice 'BAD_KEY: NOT rejected (BAD)';
+  exception when others then raise notice 'BAD_KEY: rejected -> %', sqlerrm; end;
+  -- invalid move type
+  begin perform public.create_public_lead(jsonb_set(base,'{move_type}','"Teleportation"'));
+        raise notice 'BAD_MOVETYPE: NOT rejected (BAD)';
+  exception when others then raise notice 'BAD_MOVETYPE: rejected -> %', sqlerrm; end;
+  -- oversized notes (> 4000)
+  begin perform public.create_public_lead(jsonb_set(base,'{notes}', to_jsonb(repeat('x',4100))));
+        raise notice 'BIG_NOTES: NOT rejected (BAD)';
+  exception when others then raise notice 'BIG_NOTES: rejected -> %', sqlerrm; end;
+  -- invalid date
+  begin perform public.create_public_lead(jsonb_set(base,'{move_date}','"2025-13-40"'));
+        raise notice 'BAD_DATE: NOT rejected (BAD)';
+  exception when others then raise notice 'BAD_DATE: rejected -> %', sqlerrm; end;
+  -- missing contact (no email + no phone)
+  begin perform public.create_public_lead(jsonb_build_object(
+          'first_name','NegZZ','last_name','DoNotKeep',
+          'key_hash',repeat('e',64),'payload_hash',repeat('f',64)));
+        raise notice 'NO_CONTACT: NOT rejected (BAD)';
+  exception when others then raise notice 'NO_CONTACT: rejected -> %', sqlerrm; end;
+end $$;
+-- Cleanup any idempotency claims the negative block may have created BEFORE
+-- failing (only malformed/valid-format keys that reached the claim survive; the
+-- format-rejected ones never insert). Safe, targeted delete of test keys only:
+delete from public.public_intake_idempotency
+where key_hash in (repeat('c',64), repeat('d',64), repeat('e',64), repeat('f',64));
 
 
 -- =====================================================================
@@ -209,4 +352,14 @@ commit;
 --   drop function if exists public.create_public_lead(jsonb);
 --   drop table    if exists public.public_intake_idempotency;
 -- commit;
+
+
+-- =====================================================================
+-- RETENTION (owner-run; no scheduler dependency)
+--   The intended replay/retry window is minutes. Retain claims 30 days for
+--   comfortable idempotency coverage, then prune. Deleting rows older than the
+--   retry window cannot reintroduce duplicates within that window.
+--   Run periodically (or wire pg_cron later if desired):
+--     delete from public.public_intake_idempotency
+--     where created_at < now() - interval '30 days';
 -- =====================================================================
