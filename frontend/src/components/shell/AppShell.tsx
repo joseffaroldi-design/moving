@@ -210,9 +210,11 @@ export function AppShell({
                   <span className="block text-sm font-medium leading-tight text-navy">
                     {displayName}
                   </span>
-                  <span className="block text-[11px] leading-tight text-slate-500">
-                    {role ? role.replace(/_/g, " ") : "Demo mode"}
-                  </span>
+                  {role && (
+                    <span className="block text-[11px] capitalize leading-tight text-slate-500">
+                      {role.replace(/_/g, " ")}
+                    </span>
+                  )}
                 </span>
               </button>
               {menuOpen && (
