@@ -77,7 +77,7 @@ export function AppShell({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, me, signOut } = useAuth();
+  const { user, me, role, signOut } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -90,7 +90,6 @@ export function AppShell({
   const companyName =
     (me?.company as Record<string, unknown> | null)?.name?.toString() ||
     BRAND.name;
-  const role = (me?.role as string) ?? null;
 
   async function handleSignOut() {
     await signOut();

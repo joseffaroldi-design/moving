@@ -22,7 +22,7 @@ import {
 
 export default function SettingsPage() {
   const { data } = useDashboardData();
-  const { user, me } = useAuth();
+  const { user, me, role } = useAuth();
   const toast = useToast();
   const [checking, setChecking] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -178,7 +178,7 @@ export default function SettingsPage() {
           <div className="space-y-3 p-4 text-sm">
             <Row icon={Building2} label="Company" value={data?.company?.name || profile.business_name || BRAND.name} />
             <Row icon={User} label="Signed in as" value={user?.email || "Not signed in"} />
-            <Row icon={User} label="Role" value={me?.role ? titleCase(String(me.role)) : "—"} />
+            <Row icon={User} label="Role" value={role ? titleCase(String(role)) : "—"} />
             <Row icon={Phone} label="Phone" value={profile.phone} />
             <Row icon={Mail} label="Email" value={profile.email} />
           </div>
