@@ -6,7 +6,10 @@ pure-logic fixture tests. The **authenticated customer flows below require a liv
 `test-customer@example.com` session** and must be run by the owner.
 
 Prereq: migration `0026` applied and `test-customer@example.com` linked to a customer
-row (Part D). Sign in at `/login` as that customer → you should land on `/portal`.
+row (Part D), AND a Supabase Auth user for that email with a known password whose profile
+has role=customer + a company_id matching the customer's company. Sign in at
+`/portal/login` (the customer-branded login) → you should land on `/portal`.
+(Unauthenticated `/portal/*` now auto-redirects to `/portal/login`; staff/crew still use `/login`.)
 
 ## 1. Overview (`/portal`)
 - [ ] Loads without error; nav shows Overview, Quotes, My Move, Payments, Profile, Documents.

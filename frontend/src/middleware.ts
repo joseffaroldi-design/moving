@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
 const PROTECTED = ["/dashboard", "/portal", "/mobile"];
+// Public auth pages that live under a protected prefix must be excluded.
+const PUBLIC_UNDER_PROTECTED = ["/portal/login"];
 
 export async function middleware(request: NextRequest) {
   const response = NextResponse.next({ request });
@@ -27,13 +29,17 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const path = request.nextUrl.pathname;
-  const isProtected = PROTECTED.some(
+  const isPublicAuthPage = PUBLIC_UNDER_PROTECTED.some(
     (p) => path === p || path.startsWith(p + "/")
   );
+  const isProtected =
+    !isPublicAuthPage &&
+    PROTECTED.some((p) => path === p || path.startsWith(p + "/"));
 
   if (isProtected && !user) {
     const url = request.nextUrl.clone();
-    url.pathname = "/login";
+    // Customers get the customer-branded login; staff/crew get the ops login.
+    url.pathname = path.startsWith("/portal") ? "/portal/login" : "/login";
     url.searchParams.set("next", path);
     const redirect = NextResponse.redirect(url);
     // Carry over any auth cookies Supabase refreshed while validating, so a

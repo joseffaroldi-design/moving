@@ -689,3 +689,20 @@ Wired /mobile jobs to 0027 (assumes owner applied 0027; reads gracefully error i
   [document_signatures INCOMPATIBLE — report before any new table]).
 
 
+
+## Phase 9 — Customer Login page (2026-06, BUILT; tsc + build + routing PASS)
+Owner reported "Customer Login page is missing": the only sign-in was the staff-branded
+`/login` and unauth `/portal/*` redirected there. Added a customer-facing login (UI-only;
+reuses existing Supabase auth via AuthProvider.signIn — integration_expert consulted; NO
+auth-logic/RLS/grant/migration changes).
+- NEW `src/app/portal/login/page.tsx` — customer-branded login (Suspense+useSearchParams for
+  safe ?next=; already-signed-in redirect via homeForRole; success → customer/next else home).
+- `src/app/portal/layout.tsx` — bypasses AppShell for `/portal/login` (public, no auth shell).
+- `src/middleware.ts` — `/portal/login` excluded from protection; unauth `/portal/*` → `/portal/login`
+  (staff/crew `/dashboard`,`/mobile` still → `/login`); safe next carried.
+- `src/app/login/page.tsx` — added reciprocal "Customer sign in" → /portal/login link.
+- Verified: tsc PASS; build PASS (/portal/login emitted); /portal/login=200; unauth /portal→
+  /portal/login?next=/portal (307); /dashboard & /mobile/jobs still →/login; screenshot on-brand.
+- STILL BLOCKED for authenticated portal acceptance tests: needs a real customer Auth user
+  (email+password) whose profile is role=customer + company_id set + customers.auth_user_id linked
+  (0026 Part D). Owner must provision in Supabase (Auth → Users). Agent cannot (no credentials).
