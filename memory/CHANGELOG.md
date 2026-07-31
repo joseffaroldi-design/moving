@@ -1,5 +1,22 @@
 # Southern Magnolia Movers — Changelog
 
+## 2026-07-31 — Production deploy failure FIXED (build-blocker) + readiness fixes
+
+- Root cause of failed prod build (Docker step 2 `pip install`): `/app/backend/requirements.txt`
+  pinned `emergentintegrations==0.2.0`, which is NOT on public PyPI (404). The prod build's pip
+  omits the Emergent cloudfront extra-index (only `litellm` is special-cased), so resolution
+  failed → exit 1. Backend `server.py` is default boilerplate and never imports it → removed the line.
+- Deployment readiness fixes (via deployment_agent): removed `.env`/`.env.*`/`*.env` from
+  `/app/.gitignore` (so Emergent can inject prod values) and switched frontend supervisor
+  command `yarn start` → `yarn dev` (expected hot-reload mode; also resolves earlier stale-chunk drift).
+- deployment_agent re-scan: PASS (remaining notes non-blocking). Backend `/api/` 200, homepage 200.
+
+## 2026-07-31 — Public Estimate Intake: LIVE E2E VERIFIED (slug fix, supersedes CORS note below)
+
+- Corrected frontend Edge Function slug `public-estimate-intake` → `public-lead-intake`.
+  Live browser POST → 201 `{"ok":true,"status":"created"}`, single POST, loading+disabled seen,
+  success shown, no company_id/key_hash/payload_hash/service-role in payload. UTC 2026-07-31T10:22:15Z.
+
 ## 2026-06 — Public Estimate Intake: ACTIVATED (flag ON) — LIVE E2E BLOCKED BY CORS ALLOWLIST
 
 - Set `NEXT_PUBLIC_ESTIMATE_INTAKE_ENABLED=true` in `frontend/.env` (public URL + anon key
