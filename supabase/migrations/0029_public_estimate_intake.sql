@@ -112,6 +112,11 @@ declare
   v_customer uuid;
   v_lead     uuid;
 begin
+  -- Payload must be a JSON object.
+  if p_payload is null or jsonb_typeof(p_payload) <> 'object' then
+    raise exception 'invalid_payload';
+  end if;
+
   -- Resolve + assert tenant server-side (never from the client).
   select id into v_company from public.companies where id = c_company;
   if v_company is null then raise exception 'intake_misconfigured'; end if;
@@ -150,7 +155,7 @@ begin
   end if;
 
   if v_mdate_t is not null then
-    if v_mdate_t !~ '^\d{4}-\d{2}-\d{2}$' then raise exception 'invalid_move_date'; end if;
+    if v_mdate_t !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' then raise exception 'invalid_move_date'; end if;
     v_mdate := v_mdate_t::date;
     if v_mdate < current_date or v_mdate > (current_date + interval '2 years')::date then
       raise exception 'move_date_out_of_range';
@@ -303,46 +308,99 @@ rollback;
 -- Post-rollback (optional): confirm nothing persisted.
 -- select count(*) from public.customers where first_name='PreflightZZ';  -- expect 0
 
--- C5. NEGATIVE cases — each must be REJECTED (no rows). Exception-captured so it
---     leaves zero data and does not abort your session.
+-- C5. NEGATIVE cases — fully ROLLBACK-CONTAINED. Each test triggers exactly ONE
+--     invalid condition, treats the expected exception as PASS, and FAILS HARD
+--     (re-raises) if the call unexpectedly succeeds. rollback discards anything.
+begin;
 do $$
 declare
-  base jsonb := jsonb_build_object('first_name','NegZZ','last_name','DoNotKeep','phone','5045550123',
-                                   'key_hash',repeat('c',64),'payload_hash',repeat('d',64));
-  procname text;
+  -- Valid base (unique 64-hex key/payload); each test breaks ONE thing.
+  base jsonb := jsonb_build_object(
+    'first_name','NegZZ','last_name','DoNotKeep','phone','5045550123',
+    'key_hash', repeat('1',64), 'payload_hash', repeat('a',64));
 begin
-  -- missing key hash
-  begin perform public.create_public_lead(base - 'key_hash');
-        raise notice 'MISSING_KEY: NOT rejected (BAD)';
-  exception when others then raise notice 'MISSING_KEY: rejected -> %', sqlerrm; end;
-  -- malformed key hash (not 64 hex)
-  begin perform public.create_public_lead(jsonb_set(base,'{key_hash}','"XYZ"'));
-        raise notice 'BAD_KEY: NOT rejected (BAD)';
-  exception when others then raise notice 'BAD_KEY: rejected -> %', sqlerrm; end;
-  -- invalid move type
-  begin perform public.create_public_lead(jsonb_set(base,'{move_type}','"Teleportation"'));
-        raise notice 'BAD_MOVETYPE: NOT rejected (BAD)';
-  exception when others then raise notice 'BAD_MOVETYPE: rejected -> %', sqlerrm; end;
-  -- oversized notes (> 4000)
-  begin perform public.create_public_lead(jsonb_set(base,'{notes}', to_jsonb(repeat('x',4100))));
-        raise notice 'BIG_NOTES: NOT rejected (BAD)';
-  exception when others then raise notice 'BIG_NOTES: rejected -> %', sqlerrm; end;
-  -- invalid date
-  begin perform public.create_public_lead(jsonb_set(base,'{move_date}','"2025-13-40"'));
-        raise notice 'BAD_DATE: NOT rejected (BAD)';
-  exception when others then raise notice 'BAD_DATE: rejected -> %', sqlerrm; end;
-  -- missing contact (no email + no phone)
-  begin perform public.create_public_lead(jsonb_build_object(
-          'first_name','NegZZ','last_name','DoNotKeep',
-          'key_hash',repeat('e',64),'payload_hash',repeat('f',64)));
-        raise notice 'NO_CONTACT: NOT rejected (BAD)';
-  exception when others then raise notice 'NO_CONTACT: rejected -> %', sqlerrm; end;
+  -- (a) payload not an object
+  begin
+    perform public.create_public_lead('[]'::jsonb);
+    raise exception 'TEST FAILED: non-object payload accepted';
+  exception when others then
+    if sqlerrm = 'TEST FAILED: non-object payload accepted' then raise; end if;
+    raise notice 'PASS non_object_payload -> %', sqlerrm;
+  end;
+
+  -- (b) missing key_hash
+  begin
+    perform public.create_public_lead((base - 'key_hash'));
+    raise exception 'TEST FAILED: missing key accepted';
+  exception when others then
+    if sqlerrm = 'TEST FAILED: missing key accepted' then raise; end if;
+    raise notice 'PASS missing_key -> %', sqlerrm;
+  end;
+
+  -- (c) malformed key_hash
+  begin
+    perform public.create_public_lead(jsonb_set(base,'{key_hash}','"XYZ"'));
+    raise exception 'TEST FAILED: malformed key accepted';
+  exception when others then
+    if sqlerrm = 'TEST FAILED: malformed key accepted' then raise; end if;
+    raise notice 'PASS malformed_key -> %', sqlerrm;
+  end;
+
+  -- (d) invalid move_type
+  begin
+    perform public.create_public_lead(
+      jsonb_set(jsonb_set(base,'{key_hash}', to_jsonb(repeat('2',64))),'{move_type}','"Teleportation"'));
+    raise exception 'TEST FAILED: invalid move_type accepted';
+  exception when others then
+    if sqlerrm = 'TEST FAILED: invalid move_type accepted' then raise; end if;
+    raise notice 'PASS invalid_move_type -> %', sqlerrm;
+  end;
+
+  -- (e) oversized notes
+  begin
+    perform public.create_public_lead(
+      jsonb_set(jsonb_set(base,'{key_hash}', to_jsonb(repeat('3',64))),'{notes}', to_jsonb(repeat('x',4100))));
+    raise exception 'TEST FAILED: oversized notes accepted';
+  exception when others then
+    if sqlerrm = 'TEST FAILED: oversized notes accepted' then raise; end if;
+    raise notice 'PASS oversized_notes -> %', sqlerrm;
+  end;
+
+  -- (f) malformed move_date (always invalid; not date-dependent)
+  begin
+    perform public.create_public_lead(
+      jsonb_set(jsonb_set(base,'{key_hash}', to_jsonb(repeat('4',64))),'{move_date}','"2020-99-99"'));
+    raise exception 'TEST FAILED: malformed date accepted';
+  exception when others then
+    if sqlerrm = 'TEST FAILED: malformed date accepted' then raise; end if;
+    raise notice 'PASS malformed_date -> %', sqlerrm;
+  end;
+
+  -- (g) move_date out of range — DYNAMIC vs current_date (never goes stale)
+  begin
+    perform public.create_public_lead(
+      jsonb_set(jsonb_set(base,'{key_hash}', to_jsonb(repeat('5',64))),
+                '{move_date}', to_jsonb(to_char(current_date - interval '5 years','YYYY-MM-DD'))));
+    raise exception 'TEST FAILED: out-of-range date accepted';
+  exception when others then
+    if sqlerrm = 'TEST FAILED: out-of-range date accepted' then raise; end if;
+    raise notice 'PASS date_out_of_range -> %', sqlerrm;
+  end;
+
+  -- (h) missing contact (no email + no phone)
+  begin
+    perform public.create_public_lead(jsonb_build_object(
+      'first_name','NegZZ','last_name','DoNotKeep',
+      'key_hash', repeat('6',64), 'payload_hash', repeat('a',64)));
+    raise exception 'TEST FAILED: missing contact accepted';
+  exception when others then
+    if sqlerrm = 'TEST FAILED: missing contact accepted' then raise; end if;
+    raise notice 'PASS missing_contact -> %', sqlerrm;
+  end;
 end $$;
--- Cleanup any idempotency claims the negative block may have created BEFORE
--- failing (only malformed/valid-format keys that reached the claim survive; the
--- format-rejected ones never insert). Safe, targeted delete of test keys only:
-delete from public.public_intake_idempotency
-where key_hash in (repeat('c',64), repeat('d',64), repeat('e',64), repeat('f',64));
+rollback;
+-- No standalone DELETE: rollback discards any customer/lead/activity_log/
+-- idempotency row this block could ever have produced.
 
 
 -- =====================================================================
