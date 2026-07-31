@@ -743,3 +743,15 @@ Fix: both consume useAuth().role. Files: src/components/shell/AppShell.tsx, src/
 Code-only; no data/RLS/permission/security change. Verified on dev preview: badge="Owner", Settings Role="Owner".
 Deployed build (ops-preview-7.emergent.host) predates fix → owner must REDEPLOY to propagate.
 tsc PASS, build PASS, fixtures 14/14 PASS.
+
+## PRODUCTION LAUNCH ACCEPTANCE — COMPLETE (2026-07, owner-verified on ops-preview-7.emergent.host)
+Full lifecycle passed on the LIVE deployment: owner sign-in (Role=Owner), lead->paired customer,
+quote->send->approve(via /q/<token> approval link)->convert to job->dispatch->generate invoice->
+send->partial payment->balance verified->quote PDF->invoice PDF->restricted-role nav gating->
+signed-out redirects (/dashboard->/login, /portal->/portal/login). Steps 1-14,16,18 PASS;
+15 covered by prior test-customer evidence; 17 N/A single-tenant (RLS-enforced).
+Role-display fix (AppShell/Settings use resolved role) confirmed live in production.
+VERDICT: Ready for Owner Use = YES. Ready for Production = YES (deployed & acceptance-passed).
+Reminder: delete throwaway "Test Buyer" lead/customer/quote/job/invoice from production.
+Deferred/optional: automated customer emails, Business Profile logo/terms/brand-color fields,
+real-device responsive pass. Phase 10 not started.
