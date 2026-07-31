@@ -706,3 +706,21 @@ auth-logic/RLS/grant/migration changes).
 - STILL BLOCKED for authenticated portal acceptance tests: needs a real customer Auth user
   (email+password) whose profile is role=customer + company_id set + customers.auth_user_id linked
   (0026 Part D). Owner must provision in Supabase (Auth → Users). Agent cannot (no credentials).
+
+## Phase 9 — Production-Readiness Audit (2026-06)
+Acceptance ledger (owner evidence): Customer Login, T1 Overview, T2/T3/T4 empty, T5 Profile,
+T6 Documents = PASS. Populated T2a–T4b + T7 = pending owner data setup (no code blockers).
+End-to-end transition contract (ALL implemented, RPC-backed):
+- Lead+Customer (atomic): create_lead_with_customer -> {customer_id, lead_id}
+- Customer->Quote(draft): create_quote_with_items(p_customer_id|p_lead_id,...,p_line_items)
+- Quote->Sent: mark_quote_sent
+- Quote->Accepted: portal_approve_quote (customer) / respond_to_quote_approval (public link)
+- Quote->Job: convert_quote_to_job(p_quote_id, schedule, addresses, crew, trucks, notes)
+- Job->Invoice(draft): generate_invoice_for_job -> mark_invoice_sent
+- Invoice->Partial Payment: record_invoice_payment -> {status, balance}
+Portal auto-updates with no code change (portal_* SECURITY DEFINER RPCs read same base tables,
+filtered to the caller's customer_id).
+Known cosmetic: AppShell shows "Demo mode" when getMe('me') role is null (edge fn 'me' not in
+repo; likely deployed server-side; returns null role for the customer session). Portal RPCs are
+unaffected (auth.uid()-gated) — verified data loads. Optional fix only.
+Verdict: NO production-blocking code defects. Gate = owner runs populated end-to-end acceptance.
