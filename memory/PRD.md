@@ -724,3 +724,14 @@ Known cosmetic: AppShell shows "Demo mode" when getMe('me') role is null (edge f
 repo; likely deployed server-side; returns null role for the customer session). Portal RPCs are
 unaffected (auth.uid()-gated) — verified data loads. Optional fix only.
 Verdict: NO production-blocking code defects. Gate = owner runs populated end-to-end acceptance.
+
+## Phase 9 — FINAL ACCEPTANCE COMPLETE (2026-06, owner-verified end-to-end)
+All populated end-to-end tests PASS with owner evidence, using the existing linked customer
+(test-customer@example.com), via staff UI only (no SQL, no duplicate customers):
+A1 create draft quote, A2 send, T2a portal view, T2b approve->Accepted, T2c quote PDF,
+A3 convert->job, T3 job in My Move (dispatch notes/crew/trucks correctly HIDDEN),
+A4 generate+send invoice ($750), A5 partial payment ($187.50), T4a portal invoice+outstanding
+$562.50+payment history, T4b invoice PDF, T7 staff denied portal ("This portal is for customers").
+Earlier empty-state + Customer Login + T1/T5/T6 also PASS. tsc+build+fixtures+RLS boundary PASS.
+VERDICT: Customer Portal (Phase 9 P1) PRODUCTION-VERIFIED. No production-blocking defects.
+Only optional/cosmetic item outstanding: "Demo mode" badge (getMe role null). Phase 10 not started.
