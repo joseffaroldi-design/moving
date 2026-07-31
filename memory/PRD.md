@@ -735,3 +735,11 @@ $562.50+payment history, T4b invoice PDF, T7 staff denied portal ("This portal i
 Earlier empty-state + Customer Login + T1/T5/T6 also PASS. tsc+build+fixtures+RLS boundary PASS.
 VERDICT: Customer Portal (Phase 9 P1) PRODUCTION-VERIFIED. No production-blocking defects.
 Only optional/cosmetic item outstanding: "Demo mode" badge (getMe role null). Phase 10 not started.
+
+## Fix — Role display "—" / "Demo mode" (2026-07, RESOLVED, owner-verified)
+Root cause: /me edge fn returns role under profile.role (not top-level me.role); AppShell L93 +
+Settings L181 read me.role directly. AuthProvider already resolves role (me.role ?? me.profile.role).
+Fix: both consume useAuth().role. Files: src/components/shell/AppShell.tsx, src/app/dashboard/settings/page.tsx.
+Code-only; no data/RLS/permission/security change. Verified on dev preview: badge="Owner", Settings Role="Owner".
+Deployed build (ops-preview-7.emergent.host) predates fix → owner must REDEPLOY to propagate.
+tsc PASS, build PASS, fixtures 14/14 PASS.
