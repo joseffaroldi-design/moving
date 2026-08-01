@@ -15,7 +15,7 @@ const SERVICES = [
 const COMPANY = [
   { label: "Why Us", href: "/#why-us" },
   { label: "Our Process", href: "/#process" },
-  { label: "Service Area", href: "/#service-area" },
+  { label: "Service Areas", href: "/service-areas" },
   { label: "FAQs", href: "/#faqs" },
   { label: "Contact", href: "/#estimate" },
 ];
