@@ -26,6 +26,7 @@ const plex = IBM_Plex_Sans({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://ops-preview-7.emergent.host"),
   title: "Southern Magnolia Movers — Operations",
   description:
     "Southern Magnolia Movers operations platform: leads, quotes, jobs, dispatch, and crew. Moving You Forward.",

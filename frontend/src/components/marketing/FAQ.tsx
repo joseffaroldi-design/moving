@@ -18,8 +18,8 @@ const FAQS = [
     a: "Absolutely. Specialty items are our specialty. Pianos, artwork, antiques, and delicate pieces are padded, wrapped, and secured by our trained crew.",
   },
   {
-    q: "Are you licensed and insured?",
-    a: "We are fully licensed and insured. Your belongings are protected and in good hands from the first box to the last.",
+    q: "How do you protect my belongings?",
+    a: "Protecting your belongings is our top priority. Every move is handled by trained, professional movers who pad, wrap, and secure your items with care. For specifics about our coverage and credentials, give us a call and we'll gladly walk you through the details.",
   },
   {
     q: "Do you offer packing services?",

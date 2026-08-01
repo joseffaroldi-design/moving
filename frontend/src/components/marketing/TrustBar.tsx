@@ -4,7 +4,7 @@ import { Reveal } from "./Reveal";
 const ITEMS = [
   {
     icon: ShieldCheck,
-    title: "Licensed & Insured",
+    title: "Careful, Professional Service",
     desc: "Your belongings are in good hands.",
   },
   {

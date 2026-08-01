@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Phone, Mail, MapPin, Facebook, Instagram, Star } from "lucide-react";
+import { Phone, Mail, MapPin, Facebook, Instagram } from "lucide-react";
 import { BRAND } from "@/lib/brand";
 import { BrandLogo } from "./BrandLogo";
 
@@ -22,7 +22,6 @@ const COMPANY = [
 const SOCIALS = [
   { icon: Facebook, label: "Facebook", href: "#" },
   { icon: Instagram, label: "Instagram", href: "#" },
-  { icon: Star, label: "Google Reviews", href: "#" },
 ];
 
 export function SiteFooter() {
@@ -114,11 +113,11 @@ export function SiteFooter() {
         <div className="mt-14 flex flex-col items-center justify-between gap-3 border-t border-cream/10 py-6 text-xs text-cream/45 sm:flex-row">
           <p>© {year} {BRAND.name}. All rights reserved.</p>
           <div className="flex items-center gap-4">
-            <span>Licensed &amp; Insured</span>
+            <span>Locally Owned &amp; Operated</span>
             <span className="text-cream/20">•</span>
-            <a href="#" className="transition-colors hover:text-gold">Privacy Policy</a>
+            <Link href="/privacy" data-testid="footer-privacy-link" className="transition-colors hover:text-gold">Privacy Policy</Link>
             <span className="text-cream/20">•</span>
-            <a href="#" className="transition-colors hover:text-gold">Terms of Service</a>
+            <Link href="/terms" data-testid="footer-terms-link" className="transition-colors hover:text-gold">Terms of Service</Link>
             <span className="text-cream/20">•</span>
             <Link href="/login" data-testid="staff-login-link" className="transition-colors hover:text-gold">
               Staff Login

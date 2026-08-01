@@ -1,5 +1,30 @@
 # Southern Magnolia Movers — Changelog
 
+## 2026-08-01 — Public-site polish release (prepared, NOT deployed — awaiting approval)
+
+Tightly-scoped fixes for audit findings. No changes to estimate intake, Edge Functions, SQL,
+Supabase, auth/RLS, dashboard, portal, or homepage visual architecture.
+- Testimonials: removed `<Testimonials />` from page.tsx (section hidden until real verified
+  reviews exist). Component file kept unreferenced for easy future restore. No invented names/
+  ratings/quotes remain.
+- Footer (SiteFooter.tsx): Privacy Policy → /privacy, Terms of Service → /terms (real routes);
+  removed dead "Google Reviews" social icon; footer badge "Licensed & Insured" → "Locally Owned
+  & Operated". (Facebook/Instagram icons remain href="#" placeholders — need owner-provided URLs.)
+- Legal pages: created /privacy (app/privacy/page.tsx) and /terms (app/terms/page.tsx) + shared
+  LegalShell.tsx. Plain-language starter policies; effective date Aug 1, 2026; governing law LA.
+- "Licensed & Insured" regulated claim: NO owner evidence found in repo → replaced in TrustBar
+  ("Careful, Professional Service"), footer ("Locally Owned & Operated"), FAQ (reframed to
+  "How do you protect my belongings?" without asserting licensing/insurance), and the homepage
+  meta description (dropped "Licensed, insured,").
+- Social/SEO metadata (page.tsx + layout.tsx metadataBase): added canonical, og:image +
+  twitter:image (1200x630 /brand/og-share.jpg built with Pillow from existing logo asset),
+  twitter:card=summary_large_image, og:url.
+- Verified: tsc/build clean (22/22 static incl /privacy,/terms), unit tests 19+16 pass,
+  /,/privacy,/terms,og-share.jpg all 200, estimate submit still 201, 0 console errors,
+  14/14 images ok, no overflow desktop/mobile.
+- NOTE: canonical/metadataBase hardcodes https://ops-preview-7.emergent.host — update if a
+  custom domain is added. Owner/legal review of the starter policies is recommended.
+
 ## 2026-08-01 — Production smoke test + homepage polish audit (read-only, no code changes)
 
 Target: https://ops-preview-7.emergent.host

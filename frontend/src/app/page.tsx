@@ -5,7 +5,6 @@ import { TrustBar } from "@/components/marketing/TrustBar";
 import { WhyChooseUs } from "@/components/marketing/WhyChooseUs";
 import { ServicesGrid } from "@/components/marketing/ServicesGrid";
 import { ProcessTimeline } from "@/components/marketing/ProcessTimeline";
-import { Testimonials } from "@/components/marketing/Testimonials";
 import { FAQ } from "@/components/marketing/FAQ";
 import { EstimateSection } from "@/components/marketing/EstimateSection";
 import { SiteFooter } from "@/components/marketing/SiteFooter";
@@ -13,7 +12,7 @@ import { SiteFooter } from "@/components/marketing/SiteFooter";
 export const metadata: Metadata = {
   title: "Southern Magnolia Movers — New Orleans Residential & Commercial Movers",
   description:
-    "Professional residential and commercial moving throughout New Orleans and Southeast Louisiana. Licensed, insured, family-owned. Get your free estimate today.",
+    "Family-owned residential and commercial moving throughout New Orleans and Southeast Louisiana. Get your free estimate today.",
   keywords: [
     "New Orleans movers",
     "moving company New Orleans",
@@ -23,13 +22,30 @@ export const metadata: Metadata = {
     "packing services",
     "long distance movers Louisiana",
   ],
+  alternates: { canonical: "/" },
   openGraph: {
     title: "Southern Magnolia Movers — Moving You Forward.",
     description:
       "Premium residential & commercial moving across New Orleans and Southeast Louisiana. Careful crews, clear pricing, local pride.",
+    url: "/",
     type: "website",
     locale: "en_US",
     siteName: "Southern Magnolia Movers",
+    images: [
+      {
+        url: "/brand/og-share.jpg",
+        width: 1200,
+        height: 630,
+        alt: "Southern Magnolia Movers — Moving You Forward.",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Southern Magnolia Movers — Moving You Forward.",
+    description:
+      "Premium residential & commercial moving across New Orleans and Southeast Louisiana. Careful crews, clear pricing, local pride.",
+    images: ["/brand/og-share.jpg"],
   },
 };
 
@@ -43,7 +59,6 @@ export default function HomePage() {
         <WhyChooseUs />
         <ServicesGrid />
         <ProcessTimeline />
-        <Testimonials />
         <FAQ />
         <EstimateSection />
       </main>
