@@ -1,5 +1,23 @@
 # Southern Magnolia Movers — Changelog
 
+## 2026-08-01 — Production smoke test + homepage polish audit (read-only, no code changes)
+
+Target: https://ops-preview-7.emergent.host
+- PASS: homepage 200; all nav anchors resolve; 14/14 images load; estimate intake POST→201
+  {"ok":true,"status":"created"} (single request, no company_id/key_hash/payload_hash leak);
+  0 console errors (only benign Cloudflare /cdn-cgi/rum beacon abort); desktop/tablet/mobile
+  no horizontal overflow; mobile hamburger opens full nav; footer complete; metadata title/
+  description customer-facing; favicon + OG + Twitter tags present.
+- NOT TESTED (no staff account exists — signup-only, none seeded): staff login, dashboard,
+  Leads pipeline verification, quotes/jobs/dispatch/invoices/portal, PDFs.
+- CRITICAL P0 defects (live):
+  1. Fabricated testimonials (Sarah M./Marcus T./Danielle R.) shown as genuine 5-star reviews
+     (Testimonials.tsx — code comment even says "PLACEHOLDER… Do not present as genuine").
+  2. Footer Privacy Policy + Terms of Service are dead links (href="#") in SiteFooter.tsx.
+- Polish: no og:image/twitter:image (twitter:card=summary) → weak social preview; no canonical.
+- Housekeeping: two real prod test leads created during verification (LiveIntakeZZ, ProdAuditZZ)
+  — owner to remove.
+
 ## 2026-07-31 — Production deploy failure FIXED (build-blocker) + readiness fixes
 
 - Root cause of failed prod build (Docker step 2 `pip install`): `/app/backend/requirements.txt`
