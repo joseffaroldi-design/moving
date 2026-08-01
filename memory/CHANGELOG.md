@@ -1,5 +1,27 @@
 # Southern Magnolia Movers — Changelog
 
+## 2026-08-01 — Phase 11: Local SEO Expansion (public marketing only)
+
+New: src/lib/cities.ts (12 cities, unique copy), src/components/marketing/ServiceAreaMap.tsx
+(interactive stylized SVG map), src/components/marketing/AreasWeServe.tsx (homepage section),
+src/app/service-areas/page.tsx (hub), src/app/service-areas/[slug]/page.tsx (12 SSG city pages),
+src/app/not-found.tsx (branded 404). Edited: schema.ts (+cityLocalBusiness/cityService),
+sitemap.ts (+hub +12 cities → 22 URLs), page.tsx (+AreasWeServe), services/[slug]/page.tsx
+(+cities internal-link block).
+- 12 city pages: New Orleans, Metairie, Kenner, Lakeview, Uptown, Mid-City, Garden District,
+  French Quarter, Harahan, Jefferson, Elmwood, River Ridge — each unique copy, neighborhoods,
+  landmarks, city FAQs, service links, nearby-city links, estimate CTA.
+  Schema per city: LocalBusiness(MovingCompany) + Service + BreadcrumbList + FAQPage. Unique
+  title/description/canonical/OG/Twitter (12/12 unique, verified).
+- Service Areas hub: interactive map + regional overview + 12 city cards + ItemList schema.
+- Homepage: additive "Areas We Serve" section (map + city pills + CTA); existing design unchanged.
+- Internal linking: homepage → all cities + hub; service pages → cities/services/home; city pages
+  → services/nearby cities/home; hub → all cities.
+- SEO: sitemap 22 URLs, robots unchanged (public allowed), branded 404 (noindex), all metadata/
+  canonical/OG/Twitter validated. Build 43/43 static, 0 console errors, responsive (1920/768/375),
+  no broken images/links.
+- NOTE: Lighthouse not installed here → measure scores on deployed URL (PageSpeed). Not deployed.
+
 ## 2026-08-01 — Phase 10: Launch Polish & SEO (public marketing site only)
 
 New files: src/lib/services.ts, src/lib/faqs.ts, src/lib/schema.ts,

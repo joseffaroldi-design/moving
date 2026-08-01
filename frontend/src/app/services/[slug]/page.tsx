@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { BRAND } from "@/lib/brand";
 import { getService, SERVICE_SLUGS } from "@/lib/services";
+import { FEATURED_CITIES } from "@/lib/cities";
 import { SiteHeader } from "@/components/marketing/SiteHeader";
 import { SiteFooter } from "@/components/marketing/SiteFooter";
 import { EstimateSection } from "@/components/marketing/EstimateSection";
@@ -208,6 +209,34 @@ export default async function ServicePage({
                 >
                   <span className="font-serif text-lg font-medium text-navy">{r!.name}</span>
                   <ArrowRight className="h-4 w-4 text-gold-hover transition-transform duration-300 group-hover:translate-x-1" />
+                </Link>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Cities we serve — internal linking */}
+        <section className="bg-cream-100 py-16 md:py-20">
+          <div className="mx-auto max-w-7xl px-6 md:px-10">
+            <div className="flex flex-wrap items-end justify-between gap-4">
+              <h2 className="font-serif text-2xl font-medium text-navy md:text-3xl">
+                {service.name} across the New Orleans area
+              </h2>
+              <Link href="/service-areas" className="group inline-flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-gold-hover">
+                All service areas
+                <ArrowRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />
+              </Link>
+            </div>
+            <div className="mt-8 flex flex-wrap gap-2.5">
+              {FEATURED_CITIES.map((c) => (
+                <Link
+                  key={c.slug}
+                  href={`/service-areas/${c.slug}`}
+                  data-testid={`service-city-${c.slug}`}
+                  className="group inline-flex items-center gap-1.5 rounded-full border border-navy/15 bg-cream px-4 py-2 text-sm text-navy/75 transition-colors hover:border-gold hover:text-gold-hover"
+                >
+                  <MapPin className="h-3.5 w-3.5 text-gold-hover" strokeWidth={1.5} />
+                  {c.name}
                 </Link>
               ))}
             </div>

@@ -2,6 +2,7 @@ import { SITE_URL } from "./siteUrl";
 import { BRAND } from "./brand";
 import type { Faq } from "./faqs";
 import type { Service } from "./services";
+import type { City } from "./cities";
 
 const TELEPHONE = "+1-504-559-6340";
 
@@ -86,5 +87,44 @@ export function serviceSchema(s: Service) {
       telephone: TELEPHONE,
     },
     areaServed,
+  };
+}
+
+export function cityLocalBusinessSchema(c: City) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "MovingCompany",
+    "@id": `${SITE_URL}/service-areas/${c.slug}#business`,
+    name: `${BRAND.name} — ${c.name}`,
+    url: `${SITE_URL}/service-areas/${c.slug}`,
+    telephone: TELEPHONE,
+    email: BRAND.email,
+    image: `${SITE_URL}${c.heroImage}`,
+    parentOrganization: { "@type": "MovingCompany", "@id": `${SITE_URL}/#business`, name: BRAND.name, url: SITE_URL },
+    description: c.metaDescription,
+    address: {
+      "@type": "PostalAddress",
+      addressLocality: c.name,
+      addressRegion: "LA",
+      addressCountry: "US",
+    },
+    areaServed: [
+      { "@type": "City", name: `${c.name}, LA` },
+      ...c.neighborhoods.map((n) => ({ "@type": "Place", name: n })),
+    ],
+    priceRange: "$$",
+  };
+}
+
+export function cityServiceSchema(c: City) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "Service",
+    name: `Moving Services in ${c.name}, LA`,
+    serviceType: "Moving company",
+    description: c.metaDescription,
+    url: `${SITE_URL}/service-areas/${c.slug}`,
+    provider: { "@type": "MovingCompany", "@id": `${SITE_URL}/#business`, name: BRAND.name, url: SITE_URL, telephone: TELEPHONE },
+    areaServed: { "@type": "City", name: `${c.name}, LA` },
   };
 }
