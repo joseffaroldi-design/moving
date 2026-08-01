@@ -4,19 +4,20 @@ import { BRAND } from "@/lib/brand";
 import { BrandLogo } from "./BrandLogo";
 
 const SERVICES = [
-  "Residential Moving",
-  "Commercial Moving",
-  "Packing Services",
-  "Specialty Items",
-  "Local & Long Distance",
+  { label: "Residential Moving", href: "/services/residential-moving" },
+  { label: "Commercial Moving", href: "/services/commercial-moving" },
+  { label: "Local Moving", href: "/services/local-moving" },
+  { label: "Long-Distance Moving", href: "/services/long-distance-moving" },
+  { label: "Packing Services", href: "/services/packing-services" },
+  { label: "Specialty Moving", href: "/services/specialty-moving" },
 ];
 
 const COMPANY = [
-  { label: "Why Us", href: "#why-us" },
-  { label: "Our Process", href: "#process" },
-  { label: "Service Area", href: "#service-area" },
-  { label: "FAQs", href: "#faqs" },
-  { label: "Contact", href: "#estimate" },
+  { label: "Why Us", href: "/#why-us" },
+  { label: "Our Process", href: "/#process" },
+  { label: "Service Area", href: "/#service-area" },
+  { label: "FAQs", href: "/#faqs" },
+  { label: "Contact", href: "/#estimate" },
 ];
 
 export function SiteFooter() {
@@ -44,10 +45,10 @@ export function SiteFooter() {
             </p>
             <ul className="mt-5 space-y-3">
               {SERVICES.map((s) => (
-                <li key={s}>
-                  <a href="#services" className="text-sm text-cream/60 transition-colors hover:text-gold">
-                    {s}
-                  </a>
+                <li key={s.href}>
+                  <Link href={s.href} className="text-sm text-cream/60 transition-colors hover:text-gold">
+                    {s.label}
+                  </Link>
                 </li>
               ))}
             </ul>

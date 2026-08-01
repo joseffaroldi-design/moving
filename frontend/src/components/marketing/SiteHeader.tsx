@@ -7,19 +7,20 @@ import { BRAND } from "@/lib/brand";
 import { BrandLogo } from "./BrandLogo";
 
 const SERVICES = [
-  { label: "Residential Moving", href: "#services" },
-  { label: "Commercial Moving", href: "#services" },
-  { label: "Packing Services", href: "#services" },
-  { label: "Specialty Items", href: "#services" },
-  { label: "Local & Long Distance", href: "#services" },
+  { label: "Residential Moving", href: "/services/residential-moving" },
+  { label: "Commercial Moving", href: "/services/commercial-moving" },
+  { label: "Local Moving", href: "/services/local-moving" },
+  { label: "Long-Distance Moving", href: "/services/long-distance-moving" },
+  { label: "Packing Services", href: "/services/packing-services" },
+  { label: "Specialty Moving", href: "/services/specialty-moving" },
 ];
 
 const NAV = [
-  { label: "Why Us", href: "#why-us" },
-  { label: "Our Process", href: "#process" },
-  { label: "Service Area", href: "#service-area" },
-  { label: "FAQs", href: "#faqs" },
-  { label: "Contact", href: "#estimate" },
+  { label: "Why Us", href: "/#why-us" },
+  { label: "Our Process", href: "/#process" },
+  { label: "Service Area", href: "/#service-area" },
+  { label: "FAQs", href: "/#faqs" },
+  { label: "Contact", href: "/#estimate" },
 ];
 
 export function SiteHeader() {
@@ -44,7 +45,7 @@ export function SiteHeader() {
       )}
     >
       <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-3 md:px-10">
-        <a href="#top" aria-label="Southern Magnolia Movers — home" data-testid="header-logo">
+        <a href="/" aria-label="Southern Magnolia Movers — home" data-testid="header-logo">
           <BrandLogo height={scrolled ? 40 : 46} priority className="transition-all duration-500" />
         </a>
 
@@ -119,7 +120,7 @@ export function SiteHeader() {
         data-testid="mobile-menu"
       >
         <nav className="mx-auto flex max-w-7xl flex-col gap-1 px-6 py-4">
-          <a href="#services" onClick={() => setMenuOpen(false)} className="rounded-sm px-2 py-3 text-navy/80 hover:bg-gold/10 hover:text-navy">Services</a>
+          <a href="/#services" onClick={() => setMenuOpen(false)} className="rounded-sm px-2 py-3 text-navy/80 hover:bg-gold/10 hover:text-navy">Services</a>
           {NAV.map((n) => (
             <a
               key={n.href}

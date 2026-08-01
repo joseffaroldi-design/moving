@@ -8,6 +8,9 @@ import { ProcessTimeline } from "@/components/marketing/ProcessTimeline";
 import { FAQ } from "@/components/marketing/FAQ";
 import { EstimateSection } from "@/components/marketing/EstimateSection";
 import { SiteFooter } from "@/components/marketing/SiteFooter";
+import { JsonLd } from "@/components/seo/JsonLd";
+import { movingCompanySchema, faqSchema } from "@/lib/schema";
+import { HOME_FAQS } from "@/lib/faqs";
 
 export const metadata: Metadata = {
   title: "Southern Magnolia Movers — New Orleans Residential & Commercial Movers",
@@ -52,6 +55,7 @@ export const metadata: Metadata = {
 export default function HomePage() {
   return (
     <div className="min-h-screen bg-cream font-sans text-navy antialiased">
+      <JsonLd data={[movingCompanySchema(), faqSchema(HOME_FAQS)]} />
       <SiteHeader />
       <main>
         <Hero />

@@ -1,5 +1,27 @@
 # Southern Magnolia Movers — Changelog
 
+## 2026-08-01 — Phase 10: Launch Polish & SEO (public marketing site only)
+
+New files: src/lib/services.ts, src/lib/faqs.ts, src/lib/schema.ts,
+src/components/seo/JsonLd.tsx, src/app/services/[slug]/page.tsx (SSG, 6 pages),
+src/app/sitemap.ts, src/app/robots.ts.
+Edited: page.tsx (+MovingCompany & FAQPage JSON-LD), FAQ.tsx (uses shared faqs),
+SiteHeader.tsx & SiteFooter.tsx (services → /services/* pages, section links → /#anchor
+so nav works site-wide; logo → /), ServicesGrid.tsx (cards link to service pages + "Learn more").
+- sitemap.xml (9 URLs) + robots.txt (allow public, disallow /dashboard,/portal,/mobile,/login,/api;
+  Host + Sitemap) generated from NEXT_PUBLIC_SITE_URL.
+- Structured data: homepage MovingCompany(LocalBusiness) + FAQPage; each service page
+  Service + BreadcrumbList + FAQPage (+ provider). Validated via rendered JSON-LD.
+- 6 SEO landing pages: residential/commercial/local/long-distance/packing/specialty-moving,
+  each unique title/description/canonical/OG/Twitter, on-brand hero + features + FAQ +
+  related-services internal links + shared estimate form.
+- Internal linking improved (header dropdown, footer services column, homepage cards → service pages).
+- CWV best practices: all-SSG marketing pages, next/image with sizes + priority LCP, next/font swap,
+  server components (minimal client JS). Homepage design unchanged (verified nav still smooth-scrolls).
+- Build clean, 30/30 static pages, 0 console errors, no overflow desktop/mobile, images ok.
+- NOTE: Lighthouse is NOT installed in this env → real scores must be measured on the deployed URL
+  (PageSpeed Insights). Not deployed; prepared for redeploy.
+
 ## 2026-08-01 — Polish release: 2 pre-deploy corrections (prepared, NOT deployed)
 
 - Removed the "Follow Us" block (Facebook/Instagram placeholder `href="#"` icons) from
