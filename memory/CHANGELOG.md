@@ -1,5 +1,14 @@
 # Southern Magnolia Movers — Changelog
 
+## 2026-08-01 — Homepage: removed "Areas We Serve" section (per user)
+
+- Removed <AreasWeServe /> + import from app/page.tsx (user disliked the homepage map section).
+  Component file kept (unreferenced) for easy restore. ServiceAreaMap still used by the hub.
+- KEPT: /service-areas hub + all 12 city SEO pages, schema, sitemap entries (still crawlable via
+  service-page links + sitemap). Homepage 200, build 43/43 static.
+- Note: homepage no longer links directly to /service-areas; SEO pages remain in sitemap and are
+  cross-linked from service pages. A discreet footer link can be added on request.
+
 ## 2026-08-01 — Phase 11: Local SEO Expansion (public marketing only)
 
 New: src/lib/cities.ts (12 cities, unique copy), src/components/marketing/ServiceAreaMap.tsx
