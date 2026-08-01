@@ -1,5 +1,19 @@
 # Southern Magnolia Movers — Changelog
 
+## 2026-08-01 — Polish release: 2 pre-deploy corrections (prepared, NOT deployed)
+
+- Removed the "Follow Us" block (Facebook/Instagram placeholder `href="#"` icons) from
+  SiteFooter.tsx + unused lucide imports. No placeholder/invented social links remain.
+- Made the public site URL configurable: new `src/lib/siteUrl.ts` reads NEXT_PUBLIC_SITE_URL,
+  normalizes trailing slashes, warns (not fails) in production if missing, localhost dev fallback.
+  Wired into layout.tsx `metadataBase`; canonical/OG/Twitter/image URLs resolve from it.
+  Added `NEXT_PUBLIC_SITE_URL=https://ops-preview-7.emergent.host` to frontend/.env.
+- Verified: tsc/build clean (22/22 static), intake tests 19+16 pass, /,/privacy,/terms,
+  og-share.jpg all 200, canonical/og:url/og:image/twitter all absolute from env
+  (homepage → https://ops-preview-7.emergent.host, /privacy → …/privacy), no social block,
+  no dead href="#", footer legal links resolve, estimate form + submit render (intake code
+  untouched; last verified 201). No new prod test lead created.
+
 ## 2026-08-01 — Public-site polish release (prepared, NOT deployed — awaiting approval)
 
 Tightly-scoped fixes for audit findings. No changes to estimate intake, Edge Functions, SQL,

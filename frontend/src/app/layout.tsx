@@ -3,6 +3,7 @@ import { Playfair_Display, Chivo, IBM_Plex_Sans } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/components/auth/AuthProvider";
 import { ToastProvider } from "@/components/ui/toast";
+import { SITE_URL } from "@/lib/siteUrl";
 
 const playfair = Playfair_Display({
   subsets: ["latin"],
@@ -26,7 +27,7 @@ const plex = IBM_Plex_Sans({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://ops-preview-7.emergent.host"),
+  metadataBase: new URL(SITE_URL),
   title: "Southern Magnolia Movers — Operations",
   description:
     "Southern Magnolia Movers operations platform: leads, quotes, jobs, dispatch, and crew. Moving You Forward.",

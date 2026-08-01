@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Phone, Mail, MapPin, Facebook, Instagram } from "lucide-react";
+import { Phone, Mail, MapPin } from "lucide-react";
 import { BRAND } from "@/lib/brand";
 import { BrandLogo } from "./BrandLogo";
 
@@ -17,11 +17,6 @@ const COMPANY = [
   { label: "Service Area", href: "#service-area" },
   { label: "FAQs", href: "#faqs" },
   { label: "Contact", href: "#estimate" },
-];
-
-const SOCIALS = [
-  { icon: Facebook, label: "Facebook", href: "#" },
-  { icon: Instagram, label: "Instagram", href: "#" },
 ];
 
 export function SiteFooter() {
@@ -92,21 +87,6 @@ export function SiteFooter() {
                 <MapPin className="h-4 w-4 text-gold" strokeWidth={1.5} /> New Orleans, Louisiana
               </li>
             </ul>
-            <p className="mt-6 font-heading text-xs font-semibold uppercase tracking-[0.2em] text-gold">
-              Follow Us
-            </p>
-            <div className="mt-4 flex items-center gap-3">
-              {SOCIALS.map((s) => (
-                <a
-                  key={s.label}
-                  href={s.href}
-                  aria-label={s.label}
-                  className="flex h-10 w-10 items-center justify-center rounded-full border border-cream/20 text-cream/70 transition-colors hover:border-gold hover:text-gold"
-                >
-                  <s.icon className="h-4 w-4" strokeWidth={1.5} />
-                </a>
-              ))}
-            </div>
           </div>
         </div>
 
