@@ -22,32 +22,36 @@ export default async function DashboardLayout({
   let initialError: string | null = null;
 
   // Enforce the staff boundary server-side before rendering any dashboard
-  // route. Middleware proves authentication; this gate proves authorization.
+  // route. getUser() revalidates the identity with Supabase and is the
+  // authoritative server-side auth check used by this repository.
   const supabase = await createSupabaseServerClient();
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (session?.user) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role, is_active")
-      .eq("id", session.user.id)
-      .maybeSingle();
-
-    const role = typeof profile?.role === "string" ? profile.role : null;
-    if (!profile || profile.is_active !== true || !role || !STAFF_ROLES.has(role)) {
-      if (role === "mover" || role === "crew_lead") redirect("/mobile/jobs");
-      if (role === "customer") redirect("/portal");
-      redirect("/unauthorized");
-    }
+  if (!user) {
+    redirect("/login?next=/dashboard");
   }
 
-  // Read the caller's authenticated session server-side (cookies) and forward
-  // its access token. If there is no token here, we leave both null so the
-  // client DashboardProvider can retry with the browser session — we never
-  // fall back to an anonymous request.
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role, is_active")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  const role = typeof profile?.role === "string" ? profile.role : null;
+  if (!profile || profile.is_active !== true || !role || !STAFF_ROLES.has(role)) {
+    if (role === "mover" || role === "crew_lead") redirect("/mobile/jobs");
+    if (role === "customer") redirect("/portal");
+    redirect("/unauthorized");
+  }
+
+  // Read the authenticated session only to forward its access token to the
+  // dashboard API. Authorization above does not rely on getSession().
   try {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
     const token = session?.access_token;
     if (token) {
       initialData = await getDashboard(token);
