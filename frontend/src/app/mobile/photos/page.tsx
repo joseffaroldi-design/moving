@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import { Camera, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
@@ -11,31 +10,33 @@ import { crewListJobPhotos, crewUploadJobPhoto, type CrewJobPhoto } from "@/lib/
 
 export default function MobilePhotosPage() {
   const toast = useToast();
-  const searchParams = useSearchParams();
-  const jobId = searchParams.get("job");
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [ready, setReady] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const [photos, setPhotos] = useState<CrewJobPhoto[]>([]);
-  const [loading, setLoading] = useState(Boolean(jobId));
+  const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [caption, setCaption] = useState("");
   const [stage, setStage] = useState("before");
 
-  async function load() {
-    if (!jobId) return;
-    setLoading(true);
-    try {
-      setPhotos(await crewListJobPhotos(jobId));
-    } catch (e) {
-      toast(e instanceof Error ? e.message : "Unable to load photos.", "error");
-    } finally {
-      setLoading(false);
-    }
-  }
+  useEffect(() => {
+    setJobId(new URLSearchParams(window.location.search).get("job"));
+    setReady(true);
+  }, []);
 
   useEffect(() => {
-    void load();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jobId]);
+    if (!ready || !jobId) return;
+    setLoading(true);
+    crewListJobPhotos(jobId)
+      .then(setPhotos)
+      .catch((e) => toast(e instanceof Error ? e.message : "Unable to load photos.", "error"))
+      .finally(() => setLoading(false));
+  }, [ready, jobId, toast]);
+
+  async function refresh() {
+    if (!jobId) return;
+    setPhotos(await crewListJobPhotos(jobId));
+  }
 
   async function onFile(file?: File) {
     if (!jobId || !file) return;
@@ -44,7 +45,7 @@ export default function MobilePhotosPage() {
       await crewUploadJobPhoto(jobId, file, { caption, photoStage: stage });
       setCaption("");
       toast("Photo uploaded.", "success");
-      await load();
+      await refresh();
     } catch (e) {
       toast(e instanceof Error ? e.message : "Unable to upload photo.", "error");
     } finally {
@@ -52,6 +53,8 @@ export default function MobilePhotosPage() {
       if (fileRef.current) fileRef.current.value = "";
     }
   }
+
+  if (!ready) return <p className="text-sm text-slate-500">Loading photos…</p>;
 
   if (!jobId) {
     return (
@@ -67,7 +70,6 @@ export default function MobilePhotosPage() {
   return (
     <div>
       <h1 className="mb-4 font-heading text-xl font-bold text-navy">Job Photos</h1>
-
       <div className="rounded-md border border-slate-200 bg-white p-4 shadow-card">
         <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Photo type</label>
         <select value={stage} onChange={(e) => setStage(e.target.value)} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-navy">
@@ -79,20 +81,12 @@ export default function MobilePhotosPage() {
         </select>
         <label className="mt-3 block text-xs font-semibold uppercase tracking-wide text-slate-500">Caption (optional)</label>
         <input value={caption} onChange={(e) => setCaption(e.target.value)} maxLength={500} placeholder="Living room before move" className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          className="hidden"
-          onChange={(e) => void onFile(e.target.files?.[0])}
-        />
+        <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => void onFile(e.target.files?.[0])} />
         <Button variant="navy" size="lg" className="mt-4 w-full py-4 text-base" onClick={() => fileRef.current?.click()} disabled={uploading} data-testid="upload-photo-button">
           <Upload className="h-5 w-5" /> {uploading ? "Uploading…" : "Take or Upload Photo"}
         </Button>
         <p className="mt-2 text-center text-xs text-slate-400">Private job storage · images up to 15 MB</p>
       </div>
-
       <div className="mt-5">
         {loading ? (
           <p className="text-sm text-slate-500">Loading photos…</p>
@@ -103,6 +97,8 @@ export default function MobilePhotosPage() {
             {photos.map((photo) => (
               <div key={photo.id} className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-card">
                 {photo.signed_url ? (
+                  // Signed Supabase URLs are dynamic; plain img avoids a remote-image host allowlist.
+                  // eslint-disable-next-line @next/next/no-img-element
                   <img src={photo.signed_url} alt={photo.caption || "Job photo"} className="aspect-square w-full object-cover" />
                 ) : (
                   <div className="flex aspect-square items-center justify-center bg-slate-100"><Camera className="h-7 w-7 text-slate-400" /></div>
@@ -116,7 +112,6 @@ export default function MobilePhotosPage() {
           </div>
         )}
       </div>
-
       <Link href={`/mobile/jobs/${jobId}`} className="mt-5 block text-center text-sm font-semibold text-gold-hover">Back to job</Link>
     </div>
   );
