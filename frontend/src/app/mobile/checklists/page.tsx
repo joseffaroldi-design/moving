@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/toast";
@@ -10,19 +9,25 @@ import { crewPrepareChecklist, crewSetChecklistItem, type CrewChecklistItem } fr
 
 export default function MobileChecklistPage() {
   const toast = useToast();
-  const searchParams = useSearchParams();
-  const jobId = searchParams.get("job");
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [ready, setReady] = useState(false);
   const [items, setItems] = useState<CrewChecklistItem[]>([]);
-  const [loading, setLoading] = useState(Boolean(jobId));
+  const [loading, setLoading] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!jobId) return;
+    setJobId(new URLSearchParams(window.location.search).get("job"));
+    setReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!ready || !jobId) return;
+    setLoading(true);
     crewPrepareChecklist(jobId)
       .then(setItems)
       .catch((e) => toast(e instanceof Error ? e.message : "Unable to load checklist.", "error"))
       .finally(() => setLoading(false));
-  }, [jobId, toast]);
+  }, [ready, jobId, toast]);
 
   async function toggle(item: CrewChecklistItem) {
     if (!jobId || savingId) return;
@@ -36,6 +41,8 @@ export default function MobileChecklistPage() {
       setSavingId(null);
     }
   }
+
+  if (!ready) return <p className="text-sm text-slate-500">Loading checklist…</p>;
 
   if (!jobId) {
     return (
@@ -55,7 +62,6 @@ export default function MobileChecklistPage() {
         <h1 className="font-heading text-xl font-bold text-navy">Move Checklist</h1>
         <span className="text-sm font-medium text-slate-500">{done}/{items.length || 8}</span>
       </div>
-
       <div className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-card">
         {loading ? (
           <p className="p-5 text-sm text-slate-500">Loading checklist…</p>
@@ -71,14 +77,11 @@ export default function MobileChecklistPage() {
               <span className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-md border", item.is_completed ? "border-accent bg-accent text-white" : "border-slate-300 bg-white")}>
                 {item.is_completed && <Check className="h-4 w-4" />}
               </span>
-              <span className={cn("text-sm", item.is_completed ? "text-slate-400 line-through" : "text-slate-700")}>
-                {item.title}
-              </span>
+              <span className={cn("text-sm", item.is_completed ? "text-slate-400 line-through" : "text-slate-700")}>{item.title}</span>
             </button>
           ))
         )}
       </div>
-
       <Link href={`/mobile/jobs/${jobId}`} className="mt-4 block text-center text-sm font-semibold text-gold-hover">Back to job</Link>
     </div>
   );
