@@ -1,15 +1,6 @@
 import { getBrowserClient } from "@/lib/supabase/client";
 import { isNotCrewError, crewErrorMessage, crewRoleLabel } from "@/lib/crewLogic";
 
-// ---------------------------------------------------------------------------
-// Crew-mobile service layer — Phase 9 P2 Slice 1 (migration 0027).
-//
-// STRICT BOUNDARY: crew never read jobs/job_crew/customers directly (staff-only
-// RLS). Every read flows through the two authenticated SECURITY DEFINER RPCs
-// below, which return an explicit, whitelisted set of crew-safe fields for the
-// caller's OWN assigned jobs. Identity is resolved server-side from auth.uid().
-// ---------------------------------------------------------------------------
-
 export { isNotCrewError, crewErrorMessage, crewRoleLabel };
 export { jobStatusLabel } from "@/lib/jobs";
 
@@ -50,6 +41,41 @@ export interface CrewListResponse {
   offset: number;
 }
 
+export interface CrewTimeState {
+  clocked_in: boolean;
+  time_entry_id?: string;
+  job_id?: string | null;
+  clock_in_at?: string;
+  clock_out_at?: string;
+  total_minutes?: number;
+}
+
+export interface CrewChecklistItem {
+  id: string;
+  title: string;
+  is_completed: boolean;
+  completed_by: string | null;
+  completed_at: string | null;
+  sort_order: number;
+}
+
+export interface CrewJobPhoto {
+  id: string;
+  document_id: string | null;
+  caption: string | null;
+  photo_stage: string | null;
+  taken_at: string;
+  taken_by: string | null;
+  storage_path: string;
+  mime_type: string | null;
+  size_bytes: number | null;
+  signed_url?: string | null;
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error ?? "Unknown error");
+}
+
 export async function crewListJobs(
   scope: CrewScope = "active",
   limit = 50,
@@ -70,4 +96,104 @@ export async function crewGetJob(jobId: string): Promise<CrewJobDetail> {
   const { data, error } = await supabase.rpc("crew_get_job", { p_job_id: jobId });
   if (error) throw new Error(error.message);
   return data as CrewJobDetail;
+}
+
+export async function crewGetTimeState(): Promise<CrewTimeState> {
+  const supabase = getBrowserClient();
+  const { data, error } = await supabase.rpc("crew_get_time_state");
+  if (error) throw new Error(error.message);
+  return data as CrewTimeState;
+}
+
+export async function crewClockIn(jobId?: string | null): Promise<CrewTimeState> {
+  const supabase = getBrowserClient();
+  const { data, error } = await supabase.rpc("crew_clock_in", { p_job_id: jobId || null });
+  if (error) throw new Error(error.message);
+  return data as CrewTimeState;
+}
+
+export async function crewClockOut(): Promise<CrewTimeState> {
+  const supabase = getBrowserClient();
+  const { data, error } = await supabase.rpc("crew_clock_out");
+  if (error) throw new Error(error.message);
+  return data as CrewTimeState;
+}
+
+export async function crewPrepareChecklist(jobId: string): Promise<CrewChecklistItem[]> {
+  const supabase = getBrowserClient();
+  const { data, error } = await supabase.rpc("crew_prepare_checklist", { p_job_id: jobId });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as CrewChecklistItem[];
+}
+
+export async function crewSetChecklistItem(
+  jobId: string,
+  itemId: string,
+  completed: boolean
+): Promise<CrewChecklistItem> {
+  const supabase = getBrowserClient();
+  const { data, error } = await supabase.rpc("crew_set_checklist_item", {
+    p_job_id: jobId,
+    p_item_id: itemId,
+    p_completed: completed,
+  });
+  if (error) throw new Error(error.message);
+  return data as CrewChecklistItem;
+}
+
+export async function crewListJobPhotos(jobId: string): Promise<CrewJobPhoto[]> {
+  const supabase = getBrowserClient();
+  const { data, error } = await supabase.rpc("crew_list_job_photos", { p_job_id: jobId });
+  if (error) throw new Error(error.message);
+  const photos = (data ?? []) as CrewJobPhoto[];
+
+  return Promise.all(
+    photos.map(async (photo) => {
+      if (!photo.storage_path) return photo;
+      const { data: signed } = await supabase.storage
+        .from("job-photos")
+        .createSignedUrl(photo.storage_path, 60 * 60);
+      return { ...photo, signed_url: signed?.signedUrl ?? null };
+    })
+  );
+}
+
+export async function crewUploadJobPhoto(
+  jobId: string,
+  file: File,
+  options: { caption?: string; photoStage?: string } = {}
+): Promise<void> {
+  if (!file.type.startsWith("image/")) throw new Error("Please choose an image file.");
+  if (file.size > 15 * 1024 * 1024) throw new Error("Photo must be 15 MB or smaller.");
+
+  const supabase = getBrowserClient();
+  const { data: context, error: contextError } = await supabase.rpc("crew_photo_upload_context", {
+    p_job_id: jobId,
+  });
+  if (contextError) throw new Error(contextError.message);
+
+  const pathPrefix = String((context as { path_prefix?: string })?.path_prefix ?? "");
+  if (!pathPrefix) throw new Error("Photo upload context could not be created.");
+
+  const originalExt = file.name.includes(".") ? file.name.split(".").pop() : "jpg";
+  const ext = String(originalExt || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 8) || "jpg";
+  const path = `${pathPrefix}${crypto.randomUUID()}.${ext}`;
+
+  const { error: uploadError } = await supabase.storage.from("job-photos").upload(path, file, {
+    contentType: file.type || "image/jpeg",
+    upsert: false,
+  });
+  if (uploadError) throw new Error(uploadError.message);
+
+  const { error: registerError } = await supabase.rpc("crew_register_job_photo", {
+    p_job_id: jobId,
+    p_storage_path: path,
+    p_caption: options.caption?.trim() || null,
+    p_photo_stage: options.photoStage || null,
+    p_mime_type: file.type || "image/jpeg",
+    p_size_bytes: file.size,
+  });
+  if (registerError) {
+    throw new Error(`Photo uploaded but metadata registration failed: ${errorMessage(registerError)}`);
+  }
 }
