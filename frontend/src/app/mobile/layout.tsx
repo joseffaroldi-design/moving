@@ -1,13 +1,23 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { LogOut } from "lucide-react";
 import { MOBILE_NAV } from "@/lib/nav";
 import { cn } from "@/lib/utils";
 import { CrescentMark } from "@/components/brand/Logo";
+import { useAuth } from "@/components/auth/AuthProvider";
 
 export default function MobileLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { signOut } = useAuth();
+
+  async function handleSignOut() {
+    await signOut();
+    router.push("/login");
+  }
+
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col bg-cream">
       <header className="sticky top-0 z-10 flex h-14 items-center gap-2.5 border-b border-navy-800 bg-navy px-4">
@@ -15,6 +25,16 @@ export default function MobileLayout({ children }: { children: React.ReactNode }
         <span className="font-serif text-sm font-bold text-cream">
           Southern Magnolia <span className="text-gold">Crew</span>
         </span>
+        <button
+          type="button"
+          onClick={handleSignOut}
+          data-testid="mobile-logout"
+          className="ml-auto inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-semibold text-slate-300 transition-colors hover:bg-navy-800 hover:text-white"
+          aria-label="Sign out"
+        >
+          <LogOut className="h-4 w-4" />
+          <span>Sign out</span>
+        </button>
       </header>
 
       <main className="flex-1 p-4 pb-24">{children}</main>
