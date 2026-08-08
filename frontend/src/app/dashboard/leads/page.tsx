@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Search, Plus, StickyNote, MapPin, Pencil } from "lucide-react";
+import { MapPin, Pencil, Plus, Search, StickyNote } from "lucide-react";
 import { useDashboardData } from "@/components/data/DashboardProvider";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { PageHeader } from "@/components/ui/page-header";
@@ -44,19 +44,40 @@ const EMPTY_FORM = {
   notes: "",
 };
 
+const EMPTY_EDIT = { ...EMPTY_FORM };
+
+interface WebsiteEstimateDetails {
+  moveType: string | null;
+  homeSize: string | null;
+  services: string | null;
+  isWebsiteEstimate: boolean;
+}
+
+function parseWebsiteEstimateDetails(value: unknown): WebsiteEstimateDetails {
+  const text = typeof value === "string" ? value : "";
+  const lines = text.split(/\r?\n/).map((line) => line.trim());
+  const find = (label: string) => {
+    const line = lines.find((item) => item.toLowerCase().startsWith(`${label.toLowerCase()}:`));
+    return line ? line.slice(line.indexOf(":") + 1).trim() || null : null;
+  };
+  return {
+    moveType: find("Move type"),
+    homeSize: find("Home size"),
+    services: find("Services"),
+    isWebsiteEstimate: text.includes("Website Estimate Request") || !!find("Home size") || !!find("Services"),
+  };
+}
+
 export default function LeadsPage() {
   const { data } = useDashboardData();
   const { me, user } = useAuth();
   const toast = useToast();
-
-  const companyId =
-    (me?.profile as { company_id?: string } | null)?.company_id ?? null;
+  const companyId = (me?.profile as { company_id?: string } | null)?.company_id ?? null;
   const userId = user?.id ?? null;
 
   const [leads, setLeads] = useState<LeadRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [selected, setSelected] = useState<LeadRecord | null>(null);
@@ -64,7 +85,6 @@ export default function LeadsPage() {
 
   const load = useCallback(async () => {
     if (!companyId) {
-      // No authenticated company context: fall back to public dashboard leads.
       setLeads((data?.recentLeads ?? []) as unknown as LeadRecord[]);
       setLoading(false);
       return;
@@ -85,19 +105,18 @@ export default function LeadsPage() {
   }, [load]);
 
   const statuses = useMemo(
-    () => Array.from(new Set(leads.map((l) => l.status).filter(Boolean))) as string[],
+    () => Array.from(new Set(leads.map((lead) => lead.status).filter(Boolean))) as string[],
     [leads]
   );
 
   const filtered = useMemo(() => {
-    return leads.filter((l) => {
-      const name = leadName(l).toLowerCase();
-      const q = query.toLowerCase();
+    const q = query.toLowerCase();
+    return leads.filter((lead) => {
       const matchesQuery =
         !q ||
-        name.includes(q) ||
-        String(contactEmail(l) ?? "").toLowerCase().includes(q);
-      const matchesStatus = status === "all" || l.status === status;
+        leadName(lead).toLowerCase().includes(q) ||
+        String(contactEmail(lead) ?? "").toLowerCase().includes(q);
+      const matchesStatus = status === "all" || lead.status === status;
       return matchesQuery && matchesStatus;
     });
   }, [leads, query, status]);
@@ -135,8 +154,8 @@ export default function LeadsPage() {
         </div>
         <Select data-testid="leads-status-filter" value={status} onChange={(e) => setStatus(e.target.value)}>
           <option value="all">All statuses</option>
-          {statuses.map((s) => (
-            <option key={s} value={s}>{titleCase(s)}</option>
+          {statuses.map((item) => (
+            <option key={item} value={item}>{titleCase(item)}</option>
           ))}
         </Select>
       </div>
@@ -144,7 +163,7 @@ export default function LeadsPage() {
       {error ? (
         <ErrorState title="Couldn't load leads" message={error} onRetry={load} />
       ) : loading ? (
-        <TableSkeleton rows={6} cols={5} />
+        <TableSkeleton rows={6} cols={7} />
       ) : filtered.length === 0 ? (
         <EmptyState
           icon={Search}
@@ -159,51 +178,61 @@ export default function LeadsPage() {
                 <Th>Customer</Th>
                 <Th>Route</Th>
                 <Th>Move Date</Th>
+                <Th>Home Size</Th>
                 <Th>Source</Th>
                 <Th>Volume</Th>
                 <Th>Status</Th>
               </Thead>
               <Tbody>
-                {filtered.map((lead, i) => (
-                  <Tr key={lead.id ?? i} data-testid={`lead-row-${i}`} onClick={() => setSelected(lead)}>
-                    <Td className="font-medium text-navy">{leadName(lead)}</Td>
-                    <Td className="max-w-[240px] truncate text-slate-500">
-                      {addr(lead, "origin")} → {addr(lead, "destination")}
-                    </Td>
-                    <Td>{formatDate(lead.move_date as string)}</Td>
-                    <Td>{titleCase((lead.source ?? "") as string) || "—"}</Td>
-                    <Td>{leadVolume(lead)}</Td>
-                    <Td><StatusBadge status={lead.status as string} /></Td>
-                  </Tr>
-                ))}
+                {filtered.map((lead, i) => {
+                  const intake = parseWebsiteEstimateDetails(lead.notes);
+                  return (
+                    <Tr key={lead.id ?? i} data-testid={`lead-row-${i}`} onClick={() => setSelected(lead)}>
+                      <Td className="font-medium text-navy">{leadName(lead)}</Td>
+                      <Td className="max-w-[240px] truncate text-slate-500">
+                        {addr(lead, "origin")} → {addr(lead, "destination")}
+                      </Td>
+                      <Td>{formatDate(lead.move_date as string)}</Td>
+                      <Td>{intake.homeSize ?? (lead.bedrooms != null ? `${lead.bedrooms} BR` : "—")}</Td>
+                      <Td>{titleCase((lead.source ?? "") as string) || "—"}</Td>
+                      <Td>{leadVolume(lead)}</Td>
+                      <Td><StatusBadge status={lead.status as string} /></Td>
+                    </Tr>
+                  );
+                })}
               </Tbody>
             </DataTable>
           </div>
 
           <div className="space-y-3 md:hidden">
-            {filtered.map((lead, i) => (
-              <button
-                key={lead.id ?? i}
-                data-testid={`lead-card-${i}`}
-                onClick={() => setSelected(lead)}
-                className="w-full rounded-md border border-slate-200 bg-white p-4 text-left shadow-card"
-              >
-                <div className="flex items-center justify-between">
-                  <p className="font-medium text-navy">{leadName(lead)}</p>
-                  <StatusBadge status={lead.status as string} />
-                </div>
-                <p className="mt-1 flex items-center gap-1 text-xs text-slate-500">
-                  <MapPin className="h-3 w-3" />
-                  {addr(lead, "origin")} → {addr(lead, "destination")}
-                </p>
-                <p className="mt-1 text-xs text-slate-400">{formatDate(lead.move_date as string)}</p>
-              </button>
-            ))}
+            {filtered.map((lead, i) => {
+              const intake = parseWebsiteEstimateDetails(lead.notes);
+              return (
+                <button
+                  key={lead.id ?? i}
+                  data-testid={`lead-card-${i}`}
+                  onClick={() => setSelected(lead)}
+                  className="w-full rounded-md border border-slate-200 bg-white p-4 text-left shadow-card"
+                >
+                  <div className="flex items-center justify-between">
+                    <p className="font-medium text-navy">{leadName(lead)}</p>
+                    <StatusBadge status={lead.status as string} />
+                  </div>
+                  <p className="mt-1 flex items-center gap-1 text-xs text-slate-500">
+                    <MapPin className="h-3 w-3" />
+                    {addr(lead, "origin")} → {addr(lead, "destination")}
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-400">
+                    <span>{formatDate(lead.move_date as string)}</span>
+                    {intake.homeSize && <span>{intake.homeSize}</span>}
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </>
       )}
 
-      {/* New Lead form */}
       <NewLeadDrawer
         open={showNew}
         onClose={() => setShowNew(false)}
@@ -215,22 +244,21 @@ export default function LeadsPage() {
         }}
       />
 
-      {/* Detail drawer */}
       <LeadDetailDrawer
         lead={selected}
         onClose={() => setSelected(null)}
         canWrite={canWrite}
         companyId={companyId}
         userId={userId}
-        onStatusChanged={(id, s) => {
-          setLeads((prev) => prev.map((l) => (l.id === id ? { ...l, status: s } : l)));
-          setSelected((prev) => (prev && prev.id === id ? { ...prev, status: s } : prev));
+        onStatusChanged={(id, nextStatus) => {
+          setLeads((prev) => prev.map((lead) => (lead.id === id ? { ...lead, status: nextStatus } : lead)));
+          setSelected((prev) => (prev && prev.id === id ? { ...prev, status: nextStatus } : prev));
         }}
         onSaved={async (id) => {
           try {
             const fresh = await fetchLeadById(id);
             if (fresh) {
-              setLeads((prev) => prev.map((l) => (l.id === id ? fresh : l)));
+              setLeads((prev) => prev.map((lead) => (lead.id === id ? fresh : lead)));
               setSelected(fresh);
             } else {
               load();
@@ -264,13 +292,11 @@ function NewLeadDrawer({
     if (open) setForm(EMPTY_FORM);
   }, [open]);
 
-  function upd<K extends keyof typeof EMPTY_FORM>(k: K, v: string) {
-    setForm((f) => ({ ...f, [k]: v }));
+  function update<K extends keyof typeof EMPTY_FORM>(key: K, value: string) {
+    setForm((current) => ({ ...current, [key]: value }));
   }
 
   async function submit() {
-    // Synchronous ref guard: blocks duplicate invocations that fire faster
-    // than React can re-render the disabled/loading button state.
     if (savingRef.current) return;
     if (!canWrite) {
       toast("No company associated with your account.", "error");
@@ -283,7 +309,6 @@ function NewLeadDrawer({
     savingRef.current = true;
     setSaving(true);
     try {
-      // Atomic: single RPC creates customer + lead in one transaction.
       await createLeadWithCustomer({
         first_name: form.first_name.trim(),
         last_name: form.last_name.trim(),
@@ -321,81 +346,36 @@ function NewLeadDrawer({
       }
     >
       <div className="grid gap-4 sm:grid-cols-2">
-        <div>
-          <Label>First name *</Label>
-          <Input data-testid="lead-first-name" value={form.first_name} onChange={(e) => upd("first_name", e.target.value)} />
-        </div>
-        <div>
-          <Label>Last name *</Label>
-          <Input data-testid="lead-last-name" value={form.last_name} onChange={(e) => upd("last_name", e.target.value)} />
-        </div>
-        <div>
-          <Label>Email</Label>
-          <Input data-testid="lead-email" value={form.email} onChange={(e) => upd("email", e.target.value)} />
-        </div>
-        <div>
-          <Label>Phone</Label>
-          <Input data-testid="lead-phone" value={form.phone} onChange={(e) => upd("phone", e.target.value)} />
-        </div>
-        <div>
-          <Label>Source</Label>
-          <Input data-testid="lead-source" value={form.source} onChange={(e) => upd("source", e.target.value)} placeholder="Website, referral…" />
-        </div>
-        <div>
-          <Label>Move date</Label>
-          <Input data-testid="lead-move-date" type="date" value={form.move_date} onChange={(e) => upd("move_date", e.target.value)} />
-        </div>
-        <div className="sm:col-span-2">
-          <Label>Origin address</Label>
-          <Input data-testid="lead-origin" value={form.origin_address} onChange={(e) => upd("origin_address", e.target.value)} />
-        </div>
-        <div className="sm:col-span-2">
-          <Label>Destination address</Label>
-          <Input data-testid="lead-destination" value={form.destination_address} onChange={(e) => upd("destination_address", e.target.value)} />
-        </div>
-        <div>
-          <Label>Bedrooms</Label>
-          <Input data-testid="lead-bedrooms" type="number" min="0" value={form.bedrooms} onChange={(e) => upd("bedrooms", e.target.value)} />
-        </div>
-        <div>
-          <Label>Est. volume (cu ft)</Label>
-          <Input data-testid="lead-volume" type="number" min="0" value={form.estimated_volume_cuft} onChange={(e) => upd("estimated_volume_cuft", e.target.value)} />
-        </div>
-        <div className="sm:col-span-2">
-          <Label>Notes</Label>
+        <Field label="First name *"><Input data-testid="lead-first-name" value={form.first_name} onChange={(e) => update("first_name", e.target.value)} /></Field>
+        <Field label="Last name *"><Input data-testid="lead-last-name" value={form.last_name} onChange={(e) => update("last_name", e.target.value)} /></Field>
+        <Field label="Email"><Input data-testid="lead-email" type="email" value={form.email} onChange={(e) => update("email", e.target.value)} /></Field>
+        <Field label="Phone"><Input data-testid="lead-phone" value={form.phone} onChange={(e) => update("phone", e.target.value)} /></Field>
+        <Field label="Source"><Input data-testid="lead-source" value={form.source} onChange={(e) => update("source", e.target.value)} placeholder="Website, referral…" /></Field>
+        <Field label="Move date"><Input data-testid="lead-move-date" type="date" value={form.move_date} onChange={(e) => update("move_date", e.target.value)} /></Field>
+        <Field label="Origin address" wide><Input data-testid="lead-origin" value={form.origin_address} onChange={(e) => update("origin_address", e.target.value)} /></Field>
+        <Field label="Destination address" wide><Input data-testid="lead-destination" value={form.destination_address} onChange={(e) => update("destination_address", e.target.value)} /></Field>
+        <Field label="Bedrooms"><Input data-testid="lead-bedrooms" type="number" min="0" value={form.bedrooms} onChange={(e) => update("bedrooms", e.target.value)} /></Field>
+        <Field label="Est. volume (cu ft)"><Input data-testid="lead-volume" type="number" min="0" value={form.estimated_volume_cuft} onChange={(e) => update("estimated_volume_cuft", e.target.value)} /></Field>
+        <Field label="Notes" wide>
           <textarea
             data-testid="lead-notes-input"
             value={form.notes}
-            onChange={(e) => upd("notes", e.target.value)}
+            onChange={(e) => update("notes", e.target.value)}
             rows={3}
             className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
           />
-        </div>
+        </Field>
       </div>
     </Drawer>
   );
 }
 
 function customerOf(lead: LeadRecord): (LeadCustomer & Record<string, unknown>) | null {
-  const c = (lead.customers ?? (lead as Record<string, unknown>).customer) as unknown;
-  if (Array.isArray(c)) return (c[0] as LeadCustomer & Record<string, unknown>) ?? null;
-  if (c && typeof c === "object") return c as LeadCustomer & Record<string, unknown>;
+  const customer = (lead.customers ?? (lead as Record<string, unknown>).customer) as unknown;
+  if (Array.isArray(customer)) return (customer[0] as LeadCustomer & Record<string, unknown>) ?? null;
+  if (customer && typeof customer === "object") return customer as LeadCustomer & Record<string, unknown>;
   return null;
 }
-
-const EMPTY_EDIT = {
-  first_name: "",
-  last_name: "",
-  email: "",
-  phone: "",
-  source: "",
-  move_date: "",
-  origin_address: "",
-  destination_address: "",
-  bedrooms: "",
-  estimated_volume_cuft: "",
-  notes: "",
-};
 
 function LeadDetailDrawer({
   lead,
@@ -420,7 +400,6 @@ function LeadDetailDrawer({
   const [noteBody, setNoteBody] = useState("");
   const [posting, setPosting] = useState(false);
   const [savingStatus, setSavingStatus] = useState(false);
-
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState(EMPTY_EDIT);
   const [savingEdit, setSavingEdit] = useState(false);
@@ -441,10 +420,10 @@ function LeadDetailDrawer({
 
   function startEdit() {
     if (!lead) return;
-    const c = customerOf(lead);
+    const customer = customerOf(lead);
     setEditForm({
-      first_name: (c?.first_name as string) ?? "",
-      last_name: (c?.last_name as string) ?? "",
+      first_name: (customer?.first_name as string) ?? "",
+      last_name: (customer?.last_name as string) ?? "",
       email: contactEmail(lead) ?? "",
       phone: contactPhone(lead) ?? "",
       source: (lead.source as string) ?? "",
@@ -452,15 +431,14 @@ function LeadDetailDrawer({
       origin_address: (lead.origin_address as string) ?? "",
       destination_address: (lead.destination_address as string) ?? "",
       bedrooms: lead.bedrooms != null ? String(lead.bedrooms) : "",
-      estimated_volume_cuft:
-        lead.estimated_volume_cuft != null ? String(lead.estimated_volume_cuft) : "",
+      estimated_volume_cuft: lead.estimated_volume_cuft != null ? String(lead.estimated_volume_cuft) : "",
       notes: (lead.notes as string) ?? "",
     });
     setEditing(true);
   }
 
-  function updE<K extends keyof typeof EMPTY_EDIT>(k: K, v: string) {
-    setEditForm((f) => ({ ...f, [k]: v }));
+  function updateEdit<K extends keyof typeof EMPTY_EDIT>(key: K, value: string) {
+    setEditForm((current) => ({ ...current, [key]: value }));
   }
 
   async function saveEdit() {
@@ -475,21 +453,22 @@ function LeadDetailDrawer({
       return;
     }
     const bedrooms = editForm.bedrooms.trim();
-    if (bedrooms && (isNaN(Number(bedrooms)) || Number(bedrooms) < 0)) {
+    const volume = editForm.estimated_volume_cuft.trim();
+    if (bedrooms && (Number.isNaN(Number(bedrooms)) || Number(bedrooms) < 0)) {
       toast("Bedrooms must be a non-negative number.", "error");
       return;
     }
-    const vol = editForm.estimated_volume_cuft.trim();
-    if (vol && (isNaN(Number(vol)) || Number(vol) < 0)) {
+    if (volume && (Number.isNaN(Number(volume)) || Number(volume) < 0)) {
       toast("Estimated volume must be a non-negative number.", "error");
       return;
     }
+
     savingEditRef.current = true;
     setSavingEdit(true);
     try {
-      const c = customerOf(lead);
-      if (c?.id) {
-        await updateCustomerContact(c.id as string, {
+      const customer = customerOf(lead);
+      if (customer?.id) {
+        await updateCustomerContact(customer.id as string, {
           first_name: editForm.first_name.trim(),
           last_name: editForm.last_name.trim(),
           email: email || null,
@@ -502,14 +481,13 @@ function LeadDetailDrawer({
         origin_address: editForm.origin_address.trim() || null,
         destination_address: editForm.destination_address.trim() || null,
         bedrooms: bedrooms ? Number(bedrooms) : null,
-        estimated_volume_cuft: vol ? Number(vol) : null,
+        estimated_volume_cuft: volume ? Number(volume) : null,
         notes: editForm.notes.trim() || null,
       });
       toast("Lead updated.", "success");
       setEditing(false);
       onSaved(lead.id);
     } catch (e) {
-      // Preserve entered values so the user can retry without re-typing.
       toast(e instanceof Error ? e.message : "Could not update lead.", "error");
     } finally {
       savingEditRef.current = false;
@@ -517,12 +495,12 @@ function LeadDetailDrawer({
     }
   }
 
-  async function changeStatus(s: LeadStatus) {
+  async function changeStatus(nextStatus: LeadStatus) {
     if (!lead) return;
     setSavingStatus(true);
     try {
-      await updateLeadStatus(lead.id, s);
-      onStatusChanged(lead.id, s);
+      await updateLeadStatus(lead.id, nextStatus);
+      onStatusChanged(lead.id, nextStatus);
       toast("Status updated.", "success");
     } catch (e) {
       toast(e instanceof Error ? e.message : "Could not update status.", "error");
@@ -545,7 +523,7 @@ function LeadDetailDrawer({
         author_id: userId,
         body: noteBody.trim(),
       });
-      setNotes((prev) => [note, ...prev]);
+      setNotes((current) => [note, ...current]);
       setNoteBody("");
       toast("Note added.", "success");
     } catch (e) {
@@ -555,6 +533,8 @@ function LeadDetailDrawer({
     }
   }
 
+  const intake = parseWebsiteEstimateDetails(lead?.notes);
+
   return (
     <Drawer
       open={!!lead}
@@ -563,21 +543,10 @@ function LeadDetailDrawer({
       footer={
         editing ? (
           <div className="flex gap-2">
-            <Button
-              variant="gold"
-              className="flex-1"
-              loading={savingEdit}
-              onClick={saveEdit}
-              data-testid="save-lead-edit"
-            >
+            <Button variant="gold" className="flex-1" loading={savingEdit} onClick={saveEdit} data-testid="save-lead-edit">
               Save Changes
             </Button>
-            <Button
-              variant="outline"
-              disabled={savingEdit}
-              onClick={() => setEditing(false)}
-              data-testid="cancel-lead-edit"
-            >
+            <Button variant="outline" disabled={savingEdit} onClick={() => setEditing(false)} data-testid="cancel-lead-edit">
               Cancel
             </Button>
           </div>
@@ -596,8 +565,8 @@ function LeadDetailDrawer({
                   disabled={savingStatus || editing}
                   onChange={(e) => changeStatus(e.target.value as LeadStatus)}
                 >
-                  {LEAD_STATUSES.map((s) => (
-                    <option key={s} value={s}>{titleCase(s)}</option>
+                  {LEAD_STATUSES.map((item) => (
+                    <option key={item} value={item}>{titleCase(item)}</option>
                   ))}
                 </Select>
               )}
@@ -607,56 +576,25 @@ function LeadDetailDrawer({
 
           {editing ? (
             <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <Label>First name *</Label>
-                <Input data-testid="edit-first-name" value={editForm.first_name} onChange={(e) => updE("first_name", e.target.value)} />
-              </div>
-              <div>
-                <Label>Last name *</Label>
-                <Input data-testid="edit-last-name" value={editForm.last_name} onChange={(e) => updE("last_name", e.target.value)} />
-              </div>
-              <div>
-                <Label>Email</Label>
-                <Input data-testid="edit-email" type="email" value={editForm.email} onChange={(e) => updE("email", e.target.value)} />
-              </div>
-              <div>
-                <Label>Phone</Label>
-                <Input data-testid="edit-phone" value={editForm.phone} onChange={(e) => updE("phone", e.target.value)} />
-              </div>
-              <div>
-                <Label>Source</Label>
-                <Input data-testid="edit-source" value={editForm.source} onChange={(e) => updE("source", e.target.value)} placeholder="Website, referral…" />
-              </div>
-              <div>
-                <Label>Move date</Label>
-                <Input data-testid="edit-move-date" type="date" value={editForm.move_date} onChange={(e) => updE("move_date", e.target.value)} />
-              </div>
-              <div className="sm:col-span-2">
-                <Label>Origin address</Label>
-                <Input data-testid="edit-origin" value={editForm.origin_address} onChange={(e) => updE("origin_address", e.target.value)} />
-              </div>
-              <div className="sm:col-span-2">
-                <Label>Destination address</Label>
-                <Input data-testid="edit-destination" value={editForm.destination_address} onChange={(e) => updE("destination_address", e.target.value)} />
-              </div>
-              <div>
-                <Label>Bedrooms</Label>
-                <Input data-testid="edit-bedrooms" type="number" min="0" value={editForm.bedrooms} onChange={(e) => updE("bedrooms", e.target.value)} />
-              </div>
-              <div>
-                <Label>Est. volume (cu ft)</Label>
-                <Input data-testid="edit-volume" type="number" min="0" value={editForm.estimated_volume_cuft} onChange={(e) => updE("estimated_volume_cuft", e.target.value)} />
-              </div>
-              <div className="sm:col-span-2">
-                <Label>Notes</Label>
+              <Field label="First name *"><Input data-testid="edit-first-name" value={editForm.first_name} onChange={(e) => updateEdit("first_name", e.target.value)} /></Field>
+              <Field label="Last name *"><Input data-testid="edit-last-name" value={editForm.last_name} onChange={(e) => updateEdit("last_name", e.target.value)} /></Field>
+              <Field label="Email"><Input data-testid="edit-email" type="email" value={editForm.email} onChange={(e) => updateEdit("email", e.target.value)} /></Field>
+              <Field label="Phone"><Input data-testid="edit-phone" value={editForm.phone} onChange={(e) => updateEdit("phone", e.target.value)} /></Field>
+              <Field label="Source"><Input data-testid="edit-source" value={editForm.source} onChange={(e) => updateEdit("source", e.target.value)} placeholder="Website, referral…" /></Field>
+              <Field label="Move date"><Input data-testid="edit-move-date" type="date" value={editForm.move_date} onChange={(e) => updateEdit("move_date", e.target.value)} /></Field>
+              <Field label="Origin address" wide><Input data-testid="edit-origin" value={editForm.origin_address} onChange={(e) => updateEdit("origin_address", e.target.value)} /></Field>
+              <Field label="Destination address" wide><Input data-testid="edit-destination" value={editForm.destination_address} onChange={(e) => updateEdit("destination_address", e.target.value)} /></Field>
+              <Field label="Bedrooms"><Input data-testid="edit-bedrooms" type="number" min="0" value={editForm.bedrooms} onChange={(e) => updateEdit("bedrooms", e.target.value)} /></Field>
+              <Field label="Est. volume (cu ft)"><Input data-testid="edit-volume" type="number" min="0" value={editForm.estimated_volume_cuft} onChange={(e) => updateEdit("estimated_volume_cuft", e.target.value)} /></Field>
+              <Field label="Notes" wide>
                 <textarea
                   data-testid="edit-notes"
                   value={editForm.notes}
-                  onChange={(e) => updE("notes", e.target.value)}
-                  rows={3}
+                  onChange={(e) => updateEdit("notes", e.target.value)}
+                  rows={6}
                   className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
                 />
-              </div>
+              </Field>
             </div>
           ) : (
             <>
@@ -673,19 +611,21 @@ function LeadDetailDrawer({
                 <DetailRow label="Origin" value={addr(lead, "origin")} />
                 <DetailRow label="Destination" value={addr(lead, "destination")} />
                 <DetailRow label="Move Date" value={formatDate(lead.move_date as string)} />
+                {intake.moveType && <DetailRow label="Move Type" value={intake.moveType} />}
+                {intake.homeSize && <DetailRow label="Home Size" value={intake.homeSize} />}
+                {intake.services && <DetailRow label="Services" value={intake.services} />}
                 <DetailRow label="Estimated Volume" value={leadVolume(lead)} />
                 <DetailRow label="Bedrooms" value={lead.bedrooms != null ? String(lead.bedrooms) : "—"} />
                 <DetailRow label="Source" value={titleCase((lead.source ?? "") as string) || "—"} />
-                <DetailRow label="Notes" value={(lead.notes as string) || "—"} />
+                <DetailBlock label="Notes" value={(lead.notes as string) || "—"} />
               </div>
             </>
           )}
 
-          {/* Append-only lead notes — a separate action from Edit. */}
           {!editing && (
             <div>
               <h4 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                <StickyNote className="h-3.5 w-3.5" /> Notes
+                <StickyNote className="h-3.5 w-3.5" /> Staff Notes
               </h4>
               {canWrite && (
                 <div className="mb-3 space-y-2">
@@ -705,13 +645,13 @@ function LeadDetailDrawer({
               {notesLoading ? (
                 <p className="text-sm text-slate-400">Loading notes…</p>
               ) : notes.length === 0 ? (
-                <p className="text-sm text-slate-400">No notes yet.</p>
+                <p className="text-sm text-slate-400">No staff notes yet.</p>
               ) : (
                 <ul className="space-y-2" data-testid="lead-notes-list">
-                  {notes.map((n) => (
-                    <li key={n.id} className="rounded-md border border-slate-200 bg-slate-50 p-3">
-                      <p className="whitespace-pre-wrap text-sm text-slate-700">{n.body}</p>
-                      <p className="mt-1 text-[11px] text-slate-400">{formatDate(n.created_at)}</p>
+                  {notes.map((note) => (
+                    <li key={note.id} className="rounded-md border border-slate-200 bg-slate-50 p-3">
+                      <p className="whitespace-pre-wrap text-sm text-slate-700">{note.body}</p>
+                      <p className="mt-1 text-[11px] text-slate-400">{formatDate(note.created_at)}</p>
                     </li>
                   ))}
                 </ul>
@@ -724,11 +664,29 @@ function LeadDetailDrawer({
   );
 }
 
+function Field({ label, wide = false, children }: { label: string; wide?: boolean; children: React.ReactNode }) {
+  return (
+    <div className={wide ? "sm:col-span-2" : undefined}>
+      <Label>{label}</Label>
+      {children}
+    </div>
+  );
+}
+
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-2.5">
-      <span className="text-sm text-slate-500">{label}</span>
+      <span className="shrink-0 text-sm text-slate-500">{label}</span>
       <span className="text-right text-sm font-medium text-navy">{value}</span>
+    </div>
+  );
+}
+
+function DetailBlock({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="border-b border-slate-100 pb-2.5 pt-1">
+      <span className="mb-1.5 block text-sm text-slate-500">{label}</span>
+      <p className="whitespace-pre-wrap break-words text-left text-sm font-medium leading-6 text-navy">{value}</p>
     </div>
   );
 }
