@@ -20,6 +20,8 @@ import {
   type BusinessProfile,
 } from "@/lib/businessProfile";
 
+const textareaClass = "w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent";
+
 export default function SettingsPage() {
   const { data } = useDashboardData();
   const { user, me, role } = useAuth();
@@ -30,7 +32,6 @@ export default function SettingsPage() {
   const [fromDb, setFromDb] = useState(false);
   const [profile, setProfile] = useState<BusinessProfile>(FALLBACK_PROFILE);
 
-  // Resolve the signed-in user's company_id (never an arbitrary global row).
   const companyId =
     (me?.profile as { company_id?: string } | null)?.company_id ??
     (me?.company as { id?: string } | null)?.id ??
@@ -72,10 +73,7 @@ export default function SettingsPage() {
       setFromDb(true);
       toast("Business profile saved.", "success");
     } catch (e) {
-      toast(
-        e instanceof Error ? e.message : "Could not save. Ensure the business_profile table exists.",
-        "error"
-      );
+      toast(e instanceof Error ? e.message : "Could not save business profile.", "error");
     } finally {
       setSaving(false);
     }
@@ -97,7 +95,7 @@ export default function SettingsPage() {
     <div>
       <PageHeader
         title="Settings"
-        description="Business profile, account, and system status."
+        description="Business profile, branding, policies, account, and system status."
         breadcrumbs={[{ label: "Operations", href: "/dashboard" }, { label: "Settings" }]}
       />
 
@@ -120,55 +118,90 @@ export default function SettingsPage() {
           />
           {loading ? (
             <div className="grid gap-4 p-4 sm:grid-cols-2">
-              {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-16 w-full" />)}
+              {Array.from({ length: 10 }).map((_, i) => <Skeleton key={i} className="h-16 w-full" />)}
             </div>
           ) : (
-            <div className="grid gap-4 p-4 sm:grid-cols-2">
-              <div className="sm:col-span-2">
-                <Label htmlFor="biz-name">Business name</Label>
-                <Input id="biz-name" data-testid="biz-name" value={profile.business_name}
-                  onChange={(e) => set("business_name", e.target.value)} />
-              </div>
-              <div>
-                <Label htmlFor="biz-phone">Phone</Label>
-                <Input id="biz-phone" data-testid="biz-phone" value={profile.phone}
-                  onChange={(e) => set("phone", e.target.value)} />
-              </div>
-              <div>
-                <Label htmlFor="biz-email">Email</Label>
-                <Input id="biz-email" data-testid="biz-email" value={profile.email}
-                  onChange={(e) => set("email", e.target.value)} />
-              </div>
-              <div>
-                <Label htmlFor="biz-address">Address</Label>
-                <Input id="biz-address" value={profile.address ?? ""}
-                  onChange={(e) => set("address", e.target.value)} placeholder="New Orleans, LA" />
-              </div>
-              <div>
-                <Label htmlFor="biz-website">Website</Label>
-                <Input id="biz-website" value={profile.website ?? ""}
-                  onChange={(e) => set("website", e.target.value)} placeholder="https://" />
-              </div>
-              <div>
-                <Label htmlFor="biz-t1">Primary tagline</Label>
-                <Input id="biz-t1" value={profile.tagline_primary}
-                  onChange={(e) => set("tagline_primary", e.target.value)} />
-              </div>
-              <div>
-                <Label htmlFor="biz-t2">Secondary tagline</Label>
-                <Input id="biz-t2" value={profile.tagline_secondary}
-                  onChange={(e) => set("tagline_secondary", e.target.value)} />
-              </div>
-              <div>
-                <Label htmlFor="biz-tax">Default tax rate (%)</Label>
-                <Input id="biz-tax" type="number" step="0.001" value={profile.default_tax_rate ?? 0}
-                  onChange={(e) => set("default_tax_rate", Number(e.target.value))} />
-              </div>
-              <div>
-                <Label htmlFor="biz-dep">Default deposit (%)</Label>
-                <Input id="biz-dep" type="number" step="0.1" value={profile.default_deposit_percentage ?? 0}
-                  onChange={(e) => set("default_deposit_percentage", Number(e.target.value))} />
-              </div>
+            <div className="space-y-8 p-4">
+              <section>
+                <h3 className="mb-4 text-sm font-semibold text-navy">Company details</h3>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="sm:col-span-2">
+                    <Label htmlFor="biz-name">Business name</Label>
+                    <Input id="biz-name" data-testid="biz-name" value={profile.business_name}
+                      onChange={(e) => set("business_name", e.target.value)} />
+                  </div>
+                  <div>
+                    <Label htmlFor="biz-phone">Phone</Label>
+                    <Input id="biz-phone" data-testid="biz-phone" value={profile.phone}
+                      onChange={(e) => set("phone", e.target.value)} />
+                  </div>
+                  <div>
+                    <Label htmlFor="biz-email">Email</Label>
+                    <Input id="biz-email" data-testid="biz-email" type="email" value={profile.email}
+                      onChange={(e) => set("email", e.target.value)} />
+                  </div>
+                  <div>
+                    <Label htmlFor="biz-address">Address</Label>
+                    <Input id="biz-address" value={profile.address ?? ""}
+                      onChange={(e) => set("address", e.target.value)} placeholder="New Orleans, LA" />
+                  </div>
+                  <div>
+                    <Label htmlFor="biz-website">Website</Label>
+                    <Input id="biz-website" value={profile.website ?? ""}
+                      onChange={(e) => set("website", e.target.value)} placeholder="https://" />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <Label htmlFor="biz-logo">Logo URL</Label>
+                    <Input id="biz-logo" value={profile.logo_url ?? ""}
+                      onChange={(e) => set("logo_url", e.target.value)} placeholder="https://…/logo.png" />
+                  </div>
+                  <div>
+                    <Label htmlFor="biz-t1">Primary tagline</Label>
+                    <Input id="biz-t1" value={profile.tagline_primary}
+                      onChange={(e) => set("tagline_primary", e.target.value)} />
+                  </div>
+                  <div>
+                    <Label htmlFor="biz-t2">Secondary tagline</Label>
+                    <Input id="biz-t2" value={profile.tagline_secondary}
+                      onChange={(e) => set("tagline_secondary", e.target.value)} />
+                  </div>
+                </div>
+              </section>
+
+              <section>
+                <h3 className="mb-4 text-sm font-semibold text-navy">Brand colors</h3>
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <ColorField label="Primary" value={profile.brand_primary_color ?? "#0E2A4A"} onChange={(v) => set("brand_primary_color", v)} />
+                  <ColorField label="Accent" value={profile.brand_secondary_color ?? "#C89A3D"} onChange={(v) => set("brand_secondary_color", v)} />
+                  <ColorField label="Cream" value={profile.brand_cream_color ?? "#F7F0DF"} onChange={(v) => set("brand_cream_color", v)} />
+                </div>
+              </section>
+
+              <section>
+                <h3 className="mb-4 text-sm font-semibold text-navy">Pricing defaults</h3>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <Label htmlFor="biz-tax">Default tax rate (%)</Label>
+                    <Input id="biz-tax" type="number" min="0" step="0.001" value={profile.default_tax_rate ?? 0}
+                      onChange={(e) => set("default_tax_rate", Number(e.target.value))} />
+                  </div>
+                  <div>
+                    <Label htmlFor="biz-dep">Default deposit (%)</Label>
+                    <Input id="biz-dep" type="number" min="0" max="100" step="0.1" value={profile.default_deposit_percentage ?? 0}
+                      onChange={(e) => set("default_deposit_percentage", Number(e.target.value))} />
+                  </div>
+                </div>
+              </section>
+
+              <section>
+                <h3 className="mb-4 text-sm font-semibold text-navy">Customer documents & policies</h3>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <TextAreaField label="Quote terms" value={profile.quote_terms ?? ""} onChange={(v) => set("quote_terms", v)} />
+                  <TextAreaField label="Invoice terms" value={profile.invoice_terms ?? ""} onChange={(v) => set("invoice_terms", v)} />
+                  <TextAreaField label="Cancellation policy" value={profile.cancellation_policy ?? ""} onChange={(v) => set("cancellation_policy", v)} />
+                  <TextAreaField label="Payment instructions" value={profile.payment_instructions ?? ""} onChange={(v) => set("payment_instructions", v)} />
+                </div>
+              </section>
             </div>
           )}
         </Card>
@@ -218,6 +251,27 @@ export default function SettingsPage() {
             )}
           </div>
         </Card>
+      </div>
+    </div>
+  );
+}
+
+function TextAreaField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return (
+    <div>
+      <Label>{label}</Label>
+      <textarea value={value} onChange={(e) => onChange(e.target.value)} rows={4} className={textareaClass} />
+    </div>
+  );
+}
+
+function ColorField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return (
+    <div>
+      <Label>{label}</Label>
+      <div className="flex gap-2">
+        <input type="color" value={/^#[0-9a-fA-F]{6}$/.test(value) ? value : "#000000"} onChange={(e) => onChange(e.target.value)} className="h-10 w-12 cursor-pointer rounded border border-slate-300 bg-white p-1" />
+        <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder="#0E2A4A" />
       </div>
     </div>
   );
