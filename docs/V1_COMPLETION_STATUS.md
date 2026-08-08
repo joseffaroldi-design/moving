@@ -23,6 +23,7 @@ This file records what is part of V1 and separates code-complete work from owner
 
 ## Completed in the canonical source
 
+- Website estimate submissions now surface properly in Leads: Move Type, Home Size, and Services are parsed from the structured intake block, Notes preserve their multi-line formatting, and Home Size is available directly in the lead list for faster staff scanning.
 - Reporting is no longer a roadmap placeholder. V1 reporting now exposes pipeline value, quote win rate, average quote, dispatch coverage, funnel conversion, and quote-value metrics from the normalized dashboard data.
 - Business Profile settings now expose logo URL, brand colors, quote/invoice terms, cancellation policy, and payment instructions in addition to contact details and tax/deposit defaults.
 - Staff Access is available from Settings. Owners/operations managers can invite staff, change allowed roles, and activate/deactivate staff. Owner protections and same-company enforcement remain server-side.
