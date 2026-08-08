@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Activity, Building2, CheckCircle2, Circle, User, Phone, Mail } from "lucide-react";
 import { useDashboardData } from "@/components/data/DashboardProvider";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { StaffManager } from "@/components/settings/StaffManager";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -95,7 +96,7 @@ export default function SettingsPage() {
     <div>
       <PageHeader
         title="Settings"
-        description="Business profile, branding, policies, account, and system status."
+        description="Business profile, branding, policies, staff, account, and system status."
         breadcrumbs={[{ label: "Operations", href: "/dashboard" }, { label: "Settings" }]}
       />
 
@@ -226,6 +227,17 @@ export default function SettingsPage() {
             <Button variant="outline" onClick={runHealthCheck} loading={checking} data-testid="health-check-button">
               <Activity className="h-4 w-4" /> Run health check
             </Button>
+          </div>
+        </Card>
+
+        <Card className="lg:col-span-2">
+          <CardHeader title="Staff Access" />
+          <div className="p-4">
+            <StaffManager
+              companyId={companyId}
+              currentUserId={user?.id ?? null}
+              currentRole={role ? String(role) : null}
+            />
           </div>
         </Card>
 
