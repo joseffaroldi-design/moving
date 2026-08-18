@@ -12,12 +12,12 @@ export function Hero() {
       {/* Signature New Orleans artwork — the cinematic backdrop. */}
       <div className="absolute inset-0">
         <Image
-          src="/brand/login-art.jpg"
+          src="/brand/login-art-full.jpg"
           alt="Illustrated New Orleans skyline at night with a golden crescent moon, St. Louis Cathedral, and the Crescent City Connection bridge"
           fill
           priority
           sizes="100vw"
-          className="object-cover object-[68%_center] md:object-[75%_center]"
+          className="object-cover object-center"
         />
       </div>
 
@@ -34,7 +34,8 @@ export function Hero() {
       </div>
 
       {/* Navy gradients for depth + text legibility. */}
-      <div className="absolute inset-0 bg-gradient-to-r from-navy via-navy/92 to-navy/25" />
+      {/* Even navy veil (uniform across the width) + vertical depth for text. */}
+      <div className="absolute inset-0 bg-navy/55" />
       <div className="absolute inset-0 bg-gradient-to-t from-navy via-navy/25 to-navy/70" />
       <div className="grain absolute inset-0" />
 

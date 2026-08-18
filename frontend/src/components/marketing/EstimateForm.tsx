@@ -13,6 +13,8 @@ import {
 import {
   validateEstimate,
   MOVE_TYPES,
+  HOME_SIZES,
+  SERVICES,
   type EstimateFormValues,
 } from "@/lib/estimateValidation";
 
@@ -30,6 +32,13 @@ const EMPTY: EstimateFormValues = {
   phone: "",
   moveType: "",
   moveDate: "",
+  homeSize: "",
+  originCity: "",
+  originZip: "",
+  destinationCity: "",
+  destinationZip: "",
+  services: [],
+  notes: "",
 };
 
 const fieldCls =
@@ -55,7 +64,7 @@ export function EstimateForm() {
 
   const set =
     (key: keyof EstimateFormValues) =>
-    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
       const v = e.target.value;
       setValues((s) => ({ ...s, [key]: v }));
       setFieldErrors((fe) => {
@@ -66,6 +75,21 @@ export function EstimateForm() {
         return next;
       });
     };
+
+  function toggleService(name: string) {
+    setValues((s) => ({
+      ...s,
+      services: s.services.includes(name)
+        ? s.services.filter((x) => x !== name)
+        : [...s.services, name],
+    }));
+    setFieldErrors((fe) => {
+      if (!fe.services) return fe;
+      const next = { ...fe };
+      delete next.services;
+      return next;
+    });
+  }
 
   const err = (k: string) => fieldErrors[k];
   const describedBy = (k: string) => (err(k) ? `est-err-${k}` : undefined);
@@ -115,6 +139,13 @@ export function EstimateForm() {
         phone: values.phone.trim() || undefined,
         move_type: values.moveType || undefined,
         move_date: values.moveDate || undefined,
+        home_size: values.homeSize || undefined,
+        origin_city: values.originCity.trim() || undefined,
+        origin_zip: values.originZip.trim() || undefined,
+        destination_city: values.destinationCity.trim() || undefined,
+        destination_zip: values.destinationZip.trim() || undefined,
+        services: values.services.length ? values.services : undefined,
+        notes: values.notes.trim() || undefined,
       };
       const res = await submitEstimate(payload, idemRef.current);
       if (res.ok) {
@@ -274,6 +305,105 @@ export function EstimateForm() {
           />
           {err("moveDate") && <p id="est-err-moveDate" className="mt-1 text-xs text-red-600">{err("moveDate")}</p>}
         </div>
+        <select
+          value={values.homeSize}
+          onChange={set("homeSize")}
+          aria-label="Home size"
+          className={cn(fieldCls, !values.homeSize && "text-navy/40")}
+          data-testid="estimate-home-size"
+        >
+          <option value="">Home Size</option>
+          {HOME_SIZES.map((h) => (
+            <option key={h} value={h} className="text-navy">
+              {h}
+            </option>
+          ))}
+        </select>
+        <div>
+          <div className="flex gap-2">
+            <input
+              value={values.originCity}
+              onChange={set("originCity")}
+              placeholder="Moving from — City"
+              aria-label="Moving from city"
+              className={cn(fieldCls, "flex-1", err("originCity") && errCls)}
+              data-testid="estimate-origin-city"
+            />
+            <input
+              value={values.originZip}
+              onChange={set("originZip")}
+              placeholder="ZIP"
+              aria-label="Moving from ZIP"
+              inputMode="numeric"
+              aria-invalid={!!err("originZip")}
+              className={cn(fieldCls, "w-24", err("originZip") && errCls)}
+              data-testid="estimate-origin-zip"
+            />
+          </div>
+          {err("originZip") && <p className="mt-1 text-xs text-red-600">{err("originZip")}</p>}
+        </div>
+        <div>
+          <div className="flex gap-2">
+            <input
+              value={values.destinationCity}
+              onChange={set("destinationCity")}
+              placeholder="Moving to — City"
+              aria-label="Moving to city"
+              className={cn(fieldCls, "flex-1", err("destinationCity") && errCls)}
+              data-testid="estimate-destination-city"
+            />
+            <input
+              value={values.destinationZip}
+              onChange={set("destinationZip")}
+              placeholder="ZIP"
+              aria-label="Moving to ZIP"
+              inputMode="numeric"
+              aria-invalid={!!err("destinationZip")}
+              className={cn(fieldCls, "w-24", err("destinationZip") && errCls)}
+              data-testid="estimate-destination-zip"
+            />
+          </div>
+          {err("destinationZip") && <p className="mt-1 text-xs text-red-600">{err("destinationZip")}</p>}
+        </div>
+      </div>
+
+      <div>
+        <p className="mb-2 text-xs font-medium uppercase tracking-wide text-navy/50">Additional services (optional)</p>
+        <div className="flex flex-wrap gap-2" data-testid="estimate-services">
+          {SERVICES.map((s) => {
+            const active = values.services.includes(s);
+            return (
+              <button
+                type="button"
+                key={s}
+                onClick={() => toggleService(s)}
+                aria-pressed={active}
+                data-testid={`estimate-service-${s.toLowerCase().replace(/\s+/g, "-")}`}
+                className={cn(
+                  "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                  active
+                    ? "border-gold bg-gold/15 text-navy"
+                    : "border-navy/15 text-navy/60 hover:border-navy/30 hover:text-navy"
+                )}
+              >
+                {s}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div>
+        <textarea
+          value={values.notes}
+          onChange={set("notes")}
+          rows={3}
+          placeholder="Anything we should know? (stairs, elevator, parking, fragile or specialty items…)"
+          aria-label="Additional details"
+          className={cn(fieldCls, "h-auto resize-none py-2.5 leading-relaxed", err("notes") && errCls)}
+          data-testid="estimate-notes"
+        />
+        {err("notes") && <p className="mt-1 text-xs text-red-600">{err("notes")}</p>}
       </div>
 
       {err("contact") && (

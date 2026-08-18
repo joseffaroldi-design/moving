@@ -40,13 +40,13 @@ export function SiteHeader() {
       className={cn(
         "fixed inset-x-0 top-0 z-50 transition-[background-color,box-shadow,border-color] duration-500",
         scrolled
-          ? "border-b border-navy/10 bg-cream/95 shadow-[0_4px_30px_rgb(14,42,74,0.06)] backdrop-blur-md"
-          : "border-b border-transparent bg-cream/80 backdrop-blur-md"
+          ? "border-b border-navy/10 bg-cream shadow-[0_6px_24px_rgb(14,42,74,0.08)]"
+          : "border-b border-navy/[0.08] bg-cream"
       )}
     >
       <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-3 md:px-10">
         <a href="/" aria-label="Southern Magnolia Movers — home" data-testid="header-logo">
-          <BrandLogo height={scrolled ? 40 : 46} priority className="transition-all duration-500" />
+          <BrandLogo height={scrolled ? 46 : 54} priority className="transition-all duration-500" />
         </a>
 
         <nav className="hidden items-center gap-8 lg:flex" aria-label="Primary">
