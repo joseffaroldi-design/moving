@@ -5,6 +5,7 @@ import { Activity, Building2, CheckCircle2, Circle, User, Phone, Mail } from "lu
 import { useDashboardData } from "@/components/data/DashboardProvider";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { StaffManager } from "@/components/settings/StaffManager";
+import { WebsiteMediaManager } from "@/components/settings/WebsiteMediaManager";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -96,7 +97,7 @@ export default function SettingsPage() {
     <div>
       <PageHeader
         title="Settings"
-        description="Business profile, branding, policies, staff, account, and system status."
+        description="Business profile, branding, website images, policies, staff, account, and system status."
         breadcrumbs={[{ label: "Operations", href: "/dashboard" }, { label: "Settings" }]}
       />
 
@@ -205,6 +206,13 @@ export default function SettingsPage() {
               </section>
             </div>
           )}
+        </Card>
+
+        <Card className="lg:col-span-2">
+          <CardHeader title="Website & Branding Photos" />
+          <div className="p-4">
+            <WebsiteMediaManager companyId={companyId} />
+          </div>
         </Card>
 
         <Card>
