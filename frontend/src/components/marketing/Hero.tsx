@@ -1,6 +1,6 @@
-import Image from "next/image";
 import { ArrowRight, Phone } from "lucide-react";
 import { BRAND } from "@/lib/brand";
+import { ManagedMarketingImage } from "./ManagedMarketingImage";
 
 export function Hero() {
   return (
@@ -9,32 +9,24 @@ export function Hero() {
       data-testid="hero-section"
       className="relative flex min-h-[92vh] items-center overflow-hidden bg-navy pt-20"
     >
-      {/* Signature New Orleans artwork — the cinematic backdrop. */}
       <div className="absolute inset-0">
-        <Image
-          src="/brand/login-art-full.jpg"
+        <ManagedMarketingImage
+          slot="hero_background"
+          defaultSrc="/brand/login-art-full.jpg"
           alt="Illustrated New Orleans skyline at night with a golden crescent moon, St. Louis Cathedral, and the Crescent City Connection bridge"
-          fill
-          priority
-          sizes="100vw"
-          className="object-cover object-center"
+          className="h-full w-full object-cover object-center"
         />
       </div>
 
-      {/* Real moving crew, blended in on the left behind the copy. */}
       <div className="absolute inset-y-0 left-0 hidden w-[58%] md:block">
-        <Image
-          src="/brand/photos/hero-crew.jpg"
-          alt=""
-          aria-hidden="true"
-          fill
-          sizes="58vw"
-          className="object-cover object-center opacity-25 mix-blend-luminosity"
+        <ManagedMarketingImage
+          slot="hero_crew"
+          defaultSrc="/brand/photos/hero-crew.jpg"
+          alt="Southern Magnolia Movers crew"
+          className="h-full w-full object-cover object-center opacity-25 mix-blend-luminosity"
         />
       </div>
 
-      {/* Navy gradients for depth + text legibility. */}
-      {/* Even navy veil (uniform across the width) + vertical depth for text. */}
       <div className="absolute inset-0 bg-navy/55" />
       <div className="absolute inset-0 bg-gradient-to-t from-navy via-navy/25 to-navy/70" />
       <div className="grain absolute inset-0" />
