@@ -1,4 +1,5 @@
 "use client";
+// Phase 3 V1 staff delivery history and authorized retry surface.
 import { useCallback, useEffect, useState } from "react";
 import { Mail, RefreshCw } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
@@ -7,7 +8,6 @@ import { DataTable, Thead, Th, Tbody, Tr, Td } from "@/components/ui/table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { getBrowserClient } from "@/lib/supabase/client";
-
 interface Row { id:string; event_type:string|null; to_address:string|null; subject:string|null; status:string|null; sent_at:string|null; created_at:string; error_message:string|null; retry_count:number; }
 export default function CommunicationsPage(){
  const [rows,setRows]=useState<Row[]>([]),[error,setError]=useState<string|null>(null),[loading,setLoading]=useState(true),[retrying,setRetrying]=useState<string|null>(null);
