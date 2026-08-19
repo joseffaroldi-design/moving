@@ -50,8 +50,12 @@ alter table public.website_media enable row level security;
 
 drop policy if exists "website_media_public_select" on public.website_media;
 create policy "website_media_public_select"
-on public.website_media for select
-to anon, authenticated
+on public.website_media for select to anon
+using (is_published = true);
+
+drop policy if exists "website_media_authenticated_select" on public.website_media;
+create policy "website_media_authenticated_select"
+on public.website_media for select to authenticated
 using (is_published = true or public.is_company_member(company_id));
 
 drop policy if exists "website_media_insert" on public.website_media;
