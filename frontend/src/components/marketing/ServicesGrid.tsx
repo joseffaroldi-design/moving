@@ -1,14 +1,23 @@
-import Image from "next/image";
 import Link from "next/link";
 import { Home, Building2, Package, Gem, MapPin, Route, ArrowRight } from "lucide-react";
 import { Reveal } from "./Reveal";
+import { ManagedMarketingImage } from "./ManagedMarketingImage";
+import type { WebsiteMediaSlot } from "@/lib/websiteMedia";
 
-const SERVICES = [
+const SERVICES: Array<{
+  icon: typeof Home;
+  title: string;
+  desc: string;
+  image: string;
+  slot: WebsiteMediaSlot;
+  slug: string;
+}> = [
   {
     icon: Home,
     title: "Residential Moving",
     desc: "From apartments to estates, we move you home.",
     image: "/brand/photos/svc-residential.jpg",
+    slot: "service_residential",
     slug: "residential-moving",
   },
   {
@@ -16,6 +25,7 @@ const SERVICES = [
     title: "Commercial Moving",
     desc: "Minimize downtime. We keep your business moving.",
     image: "/brand/photos/svc-commercial.jpg",
+    slot: "service_commercial",
     slug: "commercial-moving",
   },
   {
@@ -23,6 +33,7 @@ const SERVICES = [
     title: "Packing Services",
     desc: "Full or partial packing done professionally.",
     image: "/brand/photos/svc-packing.jpg",
+    slot: "service_packing",
     slug: "packing-services",
   },
   {
@@ -30,6 +41,7 @@ const SERVICES = [
     title: "Specialty Moving",
     desc: "Pianos, antiques, artwork, and fragile pieces.",
     image: "/brand/photos/svc-specialty.jpg",
+    slot: "service_specialty",
     slug: "specialty-moving",
   },
   {
@@ -37,6 +49,7 @@ const SERVICES = [
     title: "Local Moving",
     desc: "Local moves across town, done with care.",
     image: "/brand/photos/svc-local.jpg",
+    slot: "service_local",
     slug: "local-moving",
   },
   {
@@ -44,6 +57,7 @@ const SERVICES = [
     title: "Long-Distance Moving",
     desc: "Across Louisiana and beyond, mile after mile.",
     image: "/brand/photos/svc-longdistance.jpg",
+    slot: "service_long_distance",
     slug: "long-distance-moving",
   },
 ];
@@ -89,12 +103,11 @@ export function ServicesGrid() {
                 className="group flex h-full flex-col overflow-hidden border border-cream/10 bg-navy-800/40 lift"
               >
                 <div className="relative aspect-[16/10] overflow-hidden">
-                  <Image
-                    src={s.image}
+                  <ManagedMarketingImage
+                    slot={s.slot}
+                    defaultSrc={s.image}
                     alt={`${s.title} in New Orleans — Southern Magnolia Movers`}
-                    fill
-                    sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                    className="object-cover img-zoom"
+                    className="h-full w-full object-cover img-zoom"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-navy via-navy/30 to-transparent" />
                   <div className="absolute -bottom-5 left-5 flex h-11 w-11 items-center justify-center rounded-full border border-gold/50 bg-navy-900 shadow-lg">
