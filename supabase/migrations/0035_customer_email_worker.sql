@@ -1,7 +1,7 @@
 -- Phase 3 delivery worker. The endpoint accepts no caller-supplied recipient or
 -- lifecycle event in process_queue mode; it only sends server-created queued rows.
-create extension if not exists pg_net with schema extensions;
-create extension if not exists pg_cron with schema extensions;
+create extension if not exists pg_net;
+create extension if not exists pg_cron;
 
 do $$
 begin
