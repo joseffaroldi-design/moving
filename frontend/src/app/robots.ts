@@ -7,8 +7,18 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: "*",
         allow: "/",
-        // Keep private/operational surfaces out of search indexes.
-        disallow: ["/dashboard/", "/portal/", "/mobile/", "/login", "/api/"],
+        // Keep private, authenticated, tokenized, and operational surfaces out of search indexes.
+        disallow: [
+          "/dashboard",
+          "/portal",
+          "/mobile",
+          "/login",
+          "/forgot-password",
+          "/auth",
+          "/q",
+          "/print",
+          "/api",
+        ],
       },
     ],
     sitemap: `${SITE_URL}/sitemap.xml`,

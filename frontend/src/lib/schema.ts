@@ -19,7 +19,7 @@ const AREAS = [
   "Houma",
 ];
 
-const areaServed = AREAS.map((a) => ({ "@type": "City", name: a }));
+const areaServed = AREAS.map((a) => ({ "@type": "City", name: `${a}, LA` }));
 
 export function movingCompanySchema() {
   return {
@@ -34,12 +34,6 @@ export function movingCompanySchema() {
     logo: `${SITE_URL}/brand/logo-official.jpg`,
     description:
       "Professional residential and commercial moving throughout New Orleans and Southeast Louisiana.",
-    address: {
-      "@type": "PostalAddress",
-      addressLocality: "New Orleans",
-      addressRegion: "LA",
-      addressCountry: "US",
-    },
     areaServed,
     priceRange: "$$",
     slogan: BRAND.taglinePrimary,
@@ -90,32 +84,6 @@ export function serviceSchema(s: Service) {
   };
 }
 
-export function cityLocalBusinessSchema(c: City) {
-  return {
-    "@context": "https://schema.org",
-    "@type": "MovingCompany",
-    "@id": `${SITE_URL}/service-areas/${c.slug}#business`,
-    name: `${BRAND.name} — ${c.name}`,
-    url: `${SITE_URL}/service-areas/${c.slug}`,
-    telephone: TELEPHONE,
-    email: BRAND.email,
-    image: `${SITE_URL}${c.heroImage}`,
-    parentOrganization: { "@type": "MovingCompany", "@id": `${SITE_URL}/#business`, name: BRAND.name, url: SITE_URL },
-    description: c.metaDescription,
-    address: {
-      "@type": "PostalAddress",
-      addressLocality: c.name,
-      addressRegion: "LA",
-      addressCountry: "US",
-    },
-    areaServed: [
-      { "@type": "City", name: `${c.name}, LA` },
-      ...c.neighborhoods.map((n) => ({ "@type": "Place", name: n })),
-    ],
-    priceRange: "$$",
-  };
-}
-
 export function cityServiceSchema(c: City) {
   return {
     "@context": "https://schema.org",
@@ -124,7 +92,16 @@ export function cityServiceSchema(c: City) {
     serviceType: "Moving company",
     description: c.metaDescription,
     url: `${SITE_URL}/service-areas/${c.slug}`,
-    provider: { "@type": "MovingCompany", "@id": `${SITE_URL}/#business`, name: BRAND.name, url: SITE_URL, telephone: TELEPHONE },
-    areaServed: { "@type": "City", name: `${c.name}, LA` },
+    provider: {
+      "@type": "MovingCompany",
+      "@id": `${SITE_URL}/#business`,
+      name: BRAND.name,
+      url: SITE_URL,
+      telephone: TELEPHONE,
+    },
+    areaServed: {
+      "@type": "City",
+      name: `${c.name}, LA`,
+    },
   };
 }
