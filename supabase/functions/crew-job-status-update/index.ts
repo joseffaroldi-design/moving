@@ -19,41 +19,33 @@ Deno.serve(async (req: Request) => {
 
   const url = Deno.env.get("SUPABASE_URL");
   const anon = Deno.env.get("SUPABASE_ANON_KEY");
-  const service = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  if (!url || !anon || !service) return json({ error: "Server configuration missing" }, 500);
+  if (!url || !anon) return json({ error: "Server configuration missing" }, 500);
 
   let body: Payload;
   try { body = await req.json(); } catch { return json({ error: "Invalid JSON body" }, 400); }
   if (!body.job_id || !body.status || !allowed.has(body.status)) return json({ error: "Valid job_id and status are required" }, 400);
 
   const auth = req.headers.get("Authorization") ?? "";
-  const user = createClient(url, anon, { global: { headers: { Authorization: auth } }, auth: { persistSession: false } });
-  const { data: job, error: gateError } = await user.rpc("crew_get_job", { p_job_id: body.job_id });
-  if (gateError || !job) return json({ error: gateError?.message ?? "Job not authorized" }, 403);
+  if (!auth) return json({ error: "Unauthorized" }, 401);
 
-  const { data: userData, error: userError } = await user.auth.getUser();
-  if (userError || !userData.user) return json({ error: "Unauthorized" }, 401);
+  const user = createClient(url, anon, {
+    global: { headers: { Authorization: auth } },
+    auth: { persistSession: false },
+  });
 
-  const admin = createClient(url, service, { auth: { persistSession: false } });
-  const { data: profile } = await admin.from("profiles").select("id,company_id").eq("id", userData.user.id).single();
-  if (!profile) return json({ error: "Profile not found" }, 403);
+  const { data, error } = await user.rpc("crew_set_move_day_status", {
+    p_job_id: body.job_id,
+    p_status: body.status,
+    p_note: body.note ?? null,
+    p_latitude: body.latitude ?? null,
+    p_longitude: body.longitude ?? null,
+  });
 
-  const { data: event, error: eventError } = await admin.from("job_status_events").insert({
-    company_id: profile.company_id,
-    job_id: body.job_id,
-    status: body.status,
-    note: body.note ?? null,
-    latitude: body.latitude ?? null,
-    longitude: body.longitude ?? null,
-    created_by: profile.id,
-  }).select("id,created_at").single();
-  if (eventError || !event) return json({ error: eventError?.message ?? "Unable to log status" }, 500);
-
-  await admin.from("dispatch_assignments").update({ status: body.status, updated_at: new Date().toISOString() })
-    .eq("job_id", body.job_id).eq("company_id", profile.company_id);
-  if (body.status === "completed") {
-    await admin.from("jobs").update({ status: "completed", updated_at: new Date().toISOString() })
-      .eq("id", body.job_id).eq("company_id", profile.company_id);
+  if (error) {
+    const message = error.message || "Unable to update move-day status";
+    const status = /not authenticated|unauthorized/i.test(message) ? 401 : /not assigned|not found/i.test(message) ? 403 : 409;
+    return json({ error: message }, status);
   }
-  return json({ event_id: event.id, created_at: event.created_at }, 201);
+
+  return json(data, 200);
 });
