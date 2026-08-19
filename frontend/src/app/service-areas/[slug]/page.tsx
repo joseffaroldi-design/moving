@@ -10,7 +10,7 @@ import { SiteHeader } from "@/components/marketing/SiteHeader";
 import { SiteFooter } from "@/components/marketing/SiteFooter";
 import { EstimateSection } from "@/components/marketing/EstimateSection";
 import { JsonLd } from "@/components/seo/JsonLd";
-import { cityLocalBusinessSchema, cityServiceSchema, breadcrumbSchema, faqSchema } from "@/lib/schema";
+import { cityServiceSchema, breadcrumbSchema, faqSchema } from "@/lib/schema";
 
 export function generateStaticParams() {
   return CITY_SLUGS.map((slug) => ({ slug }));
@@ -61,7 +61,6 @@ export default async function CityPage({
     <div className="min-h-screen bg-cream font-sans text-navy antialiased">
       <JsonLd
         data={[
-          cityLocalBusinessSchema(city),
           cityServiceSchema(city),
           breadcrumbSchema([
             { name: "Home", path: "/" },
@@ -74,7 +73,6 @@ export default async function CityPage({
       <SiteHeader />
 
       <main>
-        {/* Hero */}
         <section className="relative overflow-hidden bg-navy pb-20 pt-28 md:pb-28 md:pt-36">
           <div className="grain absolute inset-0" />
           <div className="relative mx-auto grid max-w-7xl grid-cols-1 items-center gap-12 px-6 md:px-10 lg:grid-cols-2 lg:gap-16">
@@ -114,7 +112,6 @@ export default async function CityPage({
           </div>
         </section>
 
-        {/* Neighborhoods + Landmarks */}
         <section className="bg-cream py-20 md:py-28">
           <div className="mx-auto grid max-w-7xl grid-cols-1 gap-12 px-6 md:px-10 lg:grid-cols-2">
             <div>
@@ -144,7 +141,6 @@ export default async function CityPage({
           </div>
         </section>
 
-        {/* Services available (links to service pages) */}
         <section className="bg-cream-100 py-20 md:py-28">
           <div className="mx-auto max-w-7xl px-6 md:px-10">
             <p className="font-heading text-xs font-semibold uppercase tracking-[0.25em] text-gold-hover">Services in {city.name}</p>
@@ -160,7 +156,6 @@ export default async function CityPage({
           </div>
         </section>
 
-        {/* City-specific FAQ */}
         <section className="bg-cream py-20 md:py-28" aria-labelledby="city-faq-title">
           <div className="mx-auto max-w-3xl px-6 md:px-10">
             <p className="font-heading text-xs font-semibold uppercase tracking-[0.25em] text-gold-hover">Questions & Answers</p>
@@ -176,7 +171,6 @@ export default async function CityPage({
           </div>
         </section>
 
-        {/* Nearby cities (internal linking) */}
         <section className="bg-cream-100 py-16 md:py-20">
           <div className="mx-auto max-w-7xl px-6 md:px-10">
             <div className="flex flex-wrap items-end justify-between gap-4">
