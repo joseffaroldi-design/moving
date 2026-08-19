@@ -17,6 +17,7 @@ type Payload = {
   photo_stage?: string;
   mime_type?: string;
   size_bytes?: number;
+  operational_issue_id?: string;
 };
 
 Deno.serve(async (req: Request) => {
@@ -42,12 +43,13 @@ Deno.serve(async (req: Request) => {
     p_photo_stage: body.photo_stage ?? null,
     p_mime_type: body.mime_type ?? "image/jpeg",
     p_size_bytes: body.size_bytes ?? null,
+    p_operational_issue_id: body.operational_issue_id ?? null,
   });
   if (error) {
     return json(
       { error: error.message },
       /not authenticated/i.test(error.message) ? 401
-        : /not authorized|not assigned/i.test(error.message) ? 403 : 400
+        : /not authorized|not assigned|not found/i.test(error.message) ? 403 : 400
     );
   }
   return json(data, 201);
