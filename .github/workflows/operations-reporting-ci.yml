@@ -1,0 +1,38 @@
+name: Operations Reporting CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "supabase/functions/mvp-dashboard/**"
+      - "supabase/functions/customer-email/**"
+      - "supabase/migrations/**phase20_reporting_automation.sql"
+      - ".github/workflows/operations-reporting-ci.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "supabase/functions/mvp-dashboard/**"
+      - "supabase/functions/customer-email/**"
+      - "supabase/migrations/**phase20_reporting_automation.sql"
+      - ".github/workflows/operations-reporting-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Type-check operations Edge Functions
+        run: >-
+          deno check
+          supabase/functions/mvp-dashboard/index.ts
+          supabase/functions/customer-email/index.ts
