@@ -129,9 +129,30 @@ export interface DashboardCounts {
   trucks: number;
 }
 
+export interface ReportingSummary {
+  leadCount: number;
+  quotedLeadCount: number;
+  quotesSentCount: number;
+  quotesDecidedCount: number;
+  quotesWonCount: number;
+  jobsFromQuotesCount: number;
+  upcomingJobsCount: number;
+  dispatchedUpcomingJobsCount: number;
+  openPipelineValue: number;
+  averageQuoteValue: number;
+  collectedRevenue: number;
+  unpaidInvoiceCount: number;
+  unpaidInvoiceBalance: number;
+  laborHours: number;
+  completedJobBilled: number;
+  completedJobExpenses: number;
+  basicJobMargin: number;
+}
+
 export interface NormalizedDashboard {
   company: { name?: string; id?: string } | null;
   counts: DashboardCounts;
+  reporting: ReportingSummary;
   onboarding: { completed: number; total: number; steps: OnboardingStep[] };
   recentLeads: Lead[];
   recentQuotes: Quote[];
