@@ -55,8 +55,14 @@ Deno.serve(async (req: Request) => {
   }
 
   if (processQueue) {
-    const now = Date.now(), lo = new Date(now + 20 * 3600000).toISOString(), hi = new Date(now + 28 * 3600000).toISOString();
-    const { data: jobs } = await admin.from("jobs").select("id,company_id,customer_id,quote_id,scheduled_start").in("status", ["scheduled", "confirmed"]).gte("scheduled_start", lo).lte("scheduled_start", hi);
+    const now = Date.now();
+    const reminderLo = new Date(now + 20 * 3600000).toISOString();
+    const reminderHi = new Date(now + 28 * 3600000).toISOString();
+    const followUpCutoff = new Date(now - 24 * 3600000).toISOString();
+    const followUpFloor = new Date(now - 14 * 24 * 3600000).toISOString();
+
+    // Existing move-day reminder: queue once for jobs roughly one day away.
+    const { data: jobs } = await admin.from("jobs").select("id,company_id,customer_id,quote_id,scheduled_start").in("status", ["scheduled", "confirmed"]).gte("scheduled_start", reminderLo).lte("scheduled_start", reminderHi);
     for (const j of jobs ?? []) {
       if (!j.customer_id) continue;
       await admin.from("communications").insert({
@@ -64,6 +70,52 @@ Deno.serve(async (req: Request) => {
         channel: "email", direction: "outbound", provider: "resend", status: "queued", event_type: "move_reminder",
         idempotency_key: `move_reminder:${j.id}:${String(j.scheduled_start).slice(0, 10)}`,
         related_object_type: "job", related_object_id: j.id, metadata: { move_date: j.scheduled_start },
+      });
+    }
+
+    // One 24-hour quote follow-up while the quote is still open.
+    const { data: quoteFollowUps } = await admin.from("quotes")
+      .select("id,company_id,customer_id,lead_id,sent_at")
+      .in("status", ["sent", "viewed"])
+      .not("customer_id", "is", null)
+      .not("sent_at", "is", null)
+      .lte("sent_at", followUpCutoff)
+      .gte("sent_at", followUpFloor);
+    for (const qf of quoteFollowUps ?? []) {
+      await admin.from("communications").insert({
+        company_id: qf.company_id, customer_id: qf.customer_id, lead_id: qf.lead_id, quote_id: qf.id,
+        channel: "email", direction: "outbound", provider: "resend", status: "queued", event_type: "quote_follow_up",
+        idempotency_key: `quote_follow_up_24h:${qf.id}`,
+        related_object_type: "quote", related_object_id: qf.id, metadata: {},
+      });
+    }
+
+    // One 24-hour deposit request after acceptance, only when no paid deposit exists.
+    const { data: depositQuotes } = await admin.from("quotes")
+      .select("id,company_id,customer_id,lead_id,deposit_amount,accepted_at")
+      .in("status", ["accepted", "converted"])
+      .not("customer_id", "is", null)
+      .not("accepted_at", "is", null)
+      .gt("deposit_amount", 0)
+      .lte("accepted_at", followUpCutoff)
+      .gte("accepted_at", followUpFloor);
+
+    const depositQuoteIds = (depositQuotes ?? []).map((q: any) => q.id);
+    const paidQuoteIds = new Set<string>();
+    if (depositQuoteIds.length > 0) {
+      const { data: paidDeposits } = await admin.from("customer_deposits")
+        .select("quote_id")
+        .in("quote_id", depositQuoteIds)
+        .not("paid_at", "is", null);
+      for (const d of paidDeposits ?? []) if (d.quote_id) paidQuoteIds.add(d.quote_id);
+    }
+    for (const dq of depositQuotes ?? []) {
+      if (paidQuoteIds.has(dq.id)) continue;
+      await admin.from("communications").insert({
+        company_id: dq.company_id, customer_id: dq.customer_id, lead_id: dq.lead_id, quote_id: dq.id,
+        channel: "email", direction: "outbound", provider: "resend", status: "queued", event_type: "deposit_request",
+        idempotency_key: `deposit_request_24h:${dq.id}`,
+        related_object_type: "quote", related_object_id: dq.id, metadata: { amount: dq.deposit_amount },
       });
     }
   }
