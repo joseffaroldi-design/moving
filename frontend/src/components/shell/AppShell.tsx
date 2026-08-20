@@ -6,12 +6,9 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   Menu,
   X,
-  Bell,
   ChevronLeft,
   LogOut,
   User as UserIcon,
-  Truck,
-  Search,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { NavItem } from "@/lib/nav";
@@ -101,7 +98,6 @@ export function AppShell({
 
   return (
     <div className="flex min-h-screen bg-cream">
-      {/* Desktop sidebar */}
       <aside
         className={cn(
           "fixed inset-y-0 left-0 z-30 hidden flex-col bg-navy transition-all duration-200 md:flex",
@@ -133,7 +129,6 @@ export function AppShell({
         </button>
       </aside>
 
-      {/* Mobile sidebar drawer */}
       {mobileOpen && (
         <div className="fixed inset-0 z-40 md:hidden">
           <div
@@ -143,7 +138,11 @@ export function AppShell({
           <aside className="absolute inset-y-0 left-0 flex w-64 flex-col bg-navy">
             <div className="flex h-16 items-center justify-between border-b border-navy-800 px-4">
               <Logo variant="light" />
-              <button onClick={() => setMobileOpen(false)} className="text-slate-300">
+              <button
+                onClick={() => setMobileOpen(false)}
+                className="rounded-md p-1 text-slate-300"
+                aria-label="Close navigation"
+              >
                 <X className="h-5 w-5" />
               </button>
             </div>
@@ -157,7 +156,6 @@ export function AppShell({
         </div>
       )}
 
-      {/* Main column */}
       <div
         className={cn(
           "flex min-w-0 flex-1 flex-col transition-all duration-200",
@@ -165,42 +163,30 @@ export function AppShell({
         )}
       >
         <header className="sticky top-0 z-20 flex h-14 items-center justify-between gap-3 border-b border-slate-200 bg-white px-4">
-          <div className="flex items-center gap-3">
+          <div className="flex min-w-0 items-center gap-3">
             <button
               data-testid="mobile-menu-button"
               onClick={() => setMobileOpen(true)}
               className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 md:hidden"
+              aria-label="Open navigation"
             >
               <Menu className="h-5 w-5" />
             </button>
-            <div className="hidden items-center gap-2 text-sm sm:flex">
+            <div className="hidden min-w-0 items-center gap-2 text-sm sm:flex">
               <span className="text-slate-400">{section}</span>
               <span className="text-slate-300">/</span>
-              <span className="font-medium text-navy">{activeLabel}</span>
+              <span className="truncate font-medium text-navy">{activeLabel}</span>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            <div className="relative hidden md:block">
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                data-testid="global-search"
-                placeholder="Search…"
-                className="h-9 w-56 rounded-md border border-slate-200 bg-slate-50 pl-8 pr-3 text-sm focus:border-accent focus:bg-white focus:outline-none"
-              />
-            </div>
-            <button
-              data-testid="notifications-button"
-              className="relative rounded-md p-2 text-slate-500 hover:bg-slate-100"
-            >
-              <Bell className="h-5 w-5" />
-              <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-gold" />
-            </button>
             <div className="relative">
               <button
                 data-testid="user-menu-button"
                 onClick={() => setMenuOpen((o) => !o)}
                 className="flex items-center gap-2 rounded-md py-1 pl-1 pr-2 hover:bg-slate-100"
+                aria-expanded={menuOpen}
+                aria-label="Account menu"
               >
                 <span className="flex h-8 w-8 items-center justify-center rounded-full bg-navy text-xs font-semibold text-white">
                   {initials(displayName)}
