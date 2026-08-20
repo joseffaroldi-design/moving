@@ -5,6 +5,15 @@ export { isNotCrewError, crewErrorMessage, crewRoleLabel };
 export { jobStatusLabel } from "@/lib/jobs";
 
 export type CrewScope = "active" | "completed" | "all";
+export type CrewMoveDayStatus =
+  | "assigned"
+  | "en_route"
+  | "arrived"
+  | "loading"
+  | "in_transit"
+  | "unloading"
+  | "completed"
+  | "issue";
 
 export interface CrewJobListItem {
   id: string;
@@ -70,6 +79,17 @@ export interface CrewJobPhoto {
   mime_type: string | null;
   size_bytes: number | null;
   signed_url?: string | null;
+}
+
+export interface CrewMoveDayReadiness {
+  ready: boolean;
+  reasons: string[];
+  checklist_total: number;
+  checklist_incomplete: number;
+  active_clock_count: number;
+  unsigned_required_document_count: number;
+  completion_acknowledgment_present: boolean;
+  completion_acknowledgment_signed: boolean;
 }
 
 function errorMessage(error: unknown) {
@@ -139,6 +159,25 @@ export async function crewSetChecklistItem(
   });
   if (error) throw new Error(error.message);
   return data as CrewChecklistItem;
+}
+
+export async function crewGetMoveDayReadiness(jobId: string): Promise<CrewMoveDayReadiness> {
+  const supabase = getBrowserClient();
+  const { data, error } = await supabase.rpc("crew_move_day_readiness", { p_job_id: jobId });
+  if (error) throw new Error(error.message);
+  return data as CrewMoveDayReadiness;
+}
+
+export async function crewUpdateMoveDayStatus(
+  jobId: string,
+  status: CrewMoveDayStatus,
+  note?: string
+): Promise<void> {
+  const supabase = getBrowserClient();
+  const { error } = await supabase.functions.invoke("crew-job-status-update", {
+    body: { job_id: jobId, status, note: note?.trim() || null },
+  });
+  if (error) throw new Error(error.message);
 }
 
 export async function crewListJobPhotos(jobId: string): Promise<CrewJobPhoto[]> {
