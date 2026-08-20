@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Receipt, Printer, Phone } from "lucide-react";
+import { Receipt, Printer, Phone, CreditCard } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -15,6 +15,7 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { PortalNotCustomer } from "@/components/portal/PortalStates";
 import { formatCurrency, formatDate, formatDateTime, titleCase } from "@/lib/format";
 import { BRAND } from "@/lib/brand";
+import { PAYMENTS_ENABLED, startPortalPaymentCheckout } from "@/lib/payments";
 import {
   portalListInvoices,
   portalGetInvoice,
@@ -52,6 +53,7 @@ export default function PortalPayments() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<PortalInvoiceDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [payingInvoiceId, setPayingInvoiceId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -73,6 +75,22 @@ export default function PortalPayments() {
     else if (!authLoading && !session) setLoading(false);
   }, [authLoading, session, load]);
 
+  useEffect(() => {
+    if (authLoading || !session || typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const payment = params.get("payment");
+    if (!payment) return;
+    if (payment === "success") {
+      toast("Payment received. Your balance will update as soon as the payment is confirmed.", "success");
+      void load();
+    } else if (payment === "cancelled") {
+      toast("Payment checkout was cancelled. No charge was made.", "info");
+    }
+    params.delete("payment");
+    const next = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ""}`;
+    window.history.replaceState({}, "", next);
+  }, [authLoading, session, toast, load]);
+
   const openDetail = useCallback(
     async (id: string) => {
       setSelectedId(id);
@@ -90,7 +108,23 @@ export default function PortalPayments() {
     [toast]
   );
 
+  async function handleInvoicePayment(invoiceId: string) {
+    setPayingInvoiceId(invoiceId);
+    try {
+      await startPortalPaymentCheckout("invoice", invoiceId);
+    } catch (e) {
+      toast(safeErrorMessage(e), "error");
+      setPayingInvoiceId(null);
+    }
+  }
+
   const outstanding = outstandingBalance(invoices);
+  const firstPayable = invoices.find(
+    (inv) => Number(inv.balance) > 0 && ["sent", "partially_paid", "overdue"].includes(effectiveStatus(inv))
+  );
+  const selectedPayable = detail
+    ? Number(detail.balance) > 0 && ["sent", "partially_paid", "overdue"].includes(effectiveStatus(detail))
+    : false;
 
   return (
     <div data-testid="portal-payments">
@@ -125,15 +159,27 @@ export default function PortalPayments() {
                   {formatCurrency(outstanding)}
                 </p>
               </div>
-              <a href={BRAND.phoneHref} data-testid="contact-to-pay">
-                <Button variant="gold" size="sm">
-                  <Phone className="h-4 w-4" /> Contact us to arrange payment
+              {PAYMENTS_ENABLED && firstPayable ? (
+                <Button
+                  variant="gold"
+                  size="sm"
+                  onClick={() => handleInvoicePayment(firstPayable.id)}
+                  disabled={payingInvoiceId === firstPayable.id}
+                  data-testid="pay-invoice-online"
+                >
+                  <CreditCard className="h-4 w-4" />
+                  {payingInvoiceId === firstPayable.id ? "Opening checkout…" : "Pay online"}
                 </Button>
-              </a>
+              ) : (
+                <a href={BRAND.phoneHref} data-testid="contact-to-pay">
+                  <Button variant="gold" size="sm">
+                    <Phone className="h-4 w-4" /> Contact us to arrange payment
+                  </Button>
+                </a>
+              )}
             </Card>
           )}
 
-          {/* Desktop table */}
           <div className="hidden overflow-hidden rounded-md border border-slate-200 bg-white shadow-card md:block">
             <table className="w-full text-sm">
               <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wider text-slate-500">
@@ -171,7 +217,6 @@ export default function PortalPayments() {
             </table>
           </div>
 
-          {/* Mobile cards */}
           <div className="space-y-3 md:hidden">
             {invoices.map((inv) => {
               const st = effectiveStatus(inv);
@@ -215,12 +260,25 @@ export default function PortalPayments() {
                   <Printer className="h-4 w-4" /> Print / PDF
                 </Button>
               </a>
-              {Number(detail.balance) > 0 && (
-                <a href={BRAND.phoneHref}>
-                  <Button variant="gold" size="sm">
-                    <Phone className="h-4 w-4" /> Arrange payment
+              {selectedPayable && (
+                PAYMENTS_ENABLED ? (
+                  <Button
+                    variant="gold"
+                    size="sm"
+                    onClick={() => handleInvoicePayment(detail.id)}
+                    disabled={payingInvoiceId === detail.id}
+                    data-testid="pay-balance-button"
+                  >
+                    <CreditCard className="h-4 w-4" />
+                    {payingInvoiceId === detail.id ? "Opening checkout…" : "Pay balance"}
                   </Button>
-                </a>
+                ) : (
+                  <a href={BRAND.phoneHref}>
+                    <Button variant="gold" size="sm">
+                      <Phone className="h-4 w-4" /> Arrange payment
+                    </Button>
+                  </a>
+                )
               )}
             </div>
           ) : null
@@ -293,7 +351,9 @@ export default function PortalPayments() {
             </div>
 
             <p className="text-xs text-slate-500">
-              Online payment isn&apos;t available yet. To pay, please call or text {BRAND.phone}.
+              {PAYMENTS_ENABLED
+                ? "Secure online card payment is available for outstanding invoices."
+                : `Online payment isn't available yet. To pay, please call or text ${BRAND.phone}.`}
             </p>
           </div>
         )}

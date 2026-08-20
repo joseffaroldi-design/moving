@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { FileText, Printer, CheckCircle2 } from "lucide-react";
+import { FileText, Printer, CheckCircle2, CreditCard } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
@@ -14,6 +14,12 @@ import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { PortalNotCustomer } from "@/components/portal/PortalStates";
 import { formatCurrency, formatDate } from "@/lib/format";
+import {
+  getPortalDepositState,
+  PAYMENTS_ENABLED,
+  startPortalPaymentCheckout,
+  type PortalDepositState,
+} from "@/lib/payments";
 import {
   portalListQuotes,
   portalGetQuote,
@@ -46,8 +52,10 @@ export default function PortalQuotes() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<PortalQuoteDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [depositState, setDepositState] = useState<PortalDepositState | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [approving, setApproving] = useState(false);
+  const [paying, setPaying] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -72,9 +80,18 @@ export default function PortalQuotes() {
   const openDetail = useCallback(async (id: string) => {
     setSelectedId(id);
     setDetail(null);
+    setDepositState(null);
     setDetailLoading(true);
     try {
-      setDetail(await portalGetQuote(id));
+      const quote = await portalGetQuote(id);
+      setDetail(quote);
+      if (
+        PAYMENTS_ENABLED &&
+        ["accepted", "converted"].includes(quote.status) &&
+        Number(quote.deposit_amount) > 0
+      ) {
+        setDepositState(await getPortalDepositState(id));
+      }
     } catch (e) {
       toast(safeErrorMessage(e), "error");
       setSelectedId(null);
@@ -104,7 +121,25 @@ export default function PortalQuotes() {
     }
   }
 
+  async function handleDepositPayment() {
+    if (!detail) return;
+    setPaying(true);
+    try {
+      await startPortalPaymentCheckout("deposit", detail.id);
+    } catch (e) {
+      toast(safeErrorMessage(e), "error");
+      setPaying(false);
+    }
+  }
+
   const canApprove = detail ? quoteLooksApprovable(detail) : false;
+  const canPayDeposit = Boolean(
+    PAYMENTS_ENABLED &&
+    detail &&
+    ["accepted", "converted"].includes(detail.status) &&
+    Number(detail.deposit_amount) > 0 &&
+    depositState?.paid !== true
+  );
 
   return (
     <div data-testid="portal-quotes">
@@ -129,7 +164,6 @@ export default function PortalQuotes() {
         />
       ) : (
         <>
-          {/* Desktop table */}
           <div className="hidden overflow-hidden rounded-md border border-slate-200 bg-white shadow-card md:block">
             <table className="w-full text-sm">
               <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wider text-slate-500">
@@ -164,7 +198,6 @@ export default function PortalQuotes() {
             </table>
           </div>
 
-          {/* Mobile cards */}
           <div className="space-y-3 md:hidden">
             {quotes.map((q) => (
               <button
@@ -205,7 +238,7 @@ export default function PortalQuotes() {
                   <Printer className="h-4 w-4" /> Print / PDF
                 </Button>
               </a>
-              {canApprove && (
+              {canApprove ? (
                 <Button
                   variant="gold"
                   size="sm"
@@ -214,7 +247,17 @@ export default function PortalQuotes() {
                 >
                   <CheckCircle2 className="h-4 w-4" /> Approve quote
                 </Button>
-              )}
+              ) : canPayDeposit ? (
+                <Button
+                  variant="gold"
+                  size="sm"
+                  onClick={handleDepositPayment}
+                  disabled={paying}
+                  data-testid="pay-deposit-button"
+                >
+                  <CreditCard className="h-4 w-4" /> {paying ? "Opening checkout…" : "Pay deposit"}
+                </Button>
+              ) : null}
             </div>
           ) : null
         }
@@ -262,7 +305,8 @@ export default function PortalQuotes() {
               </div>
               {detail.deposit_amount ? (
                 <p className="mt-2 text-xs text-slate-500">
-                  Deposit due{detail.deposit_percent ? ` (${detail.deposit_percent}%)` : ""}:{" "}
+                  {depositState?.paid ? "Deposit paid" : "Deposit due"}
+                  {detail.deposit_percent ? ` (${detail.deposit_percent}%)` : ""}:{" "}
                   <span className="font-semibold text-navy">
                     {formatCurrency(detail.deposit_amount)}
                   </span>
@@ -275,7 +319,7 @@ export default function PortalQuotes() {
                 Valid until {formatDate(detail.expires_at)}.
               </p>
             )}
-            {!canApprove && detail.status !== "accepted" && (
+            {!canApprove && detail.status !== "accepted" && detail.status !== "converted" && (
               <p className="text-xs text-slate-500">
                 This quote isn&apos;t currently awaiting your approval.
               </p>
