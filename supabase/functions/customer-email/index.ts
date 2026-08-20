@@ -1,7 +1,112 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-const cors={"Access-Control-Allow-Origin":"*","Access-Control-Allow-Headers":"authorization, x-client-info, apikey, content-type","Access-Control-Allow-Methods":"POST, OPTIONS"};
-const STAFF=new Set(["owner","operations_manager","dispatcher","sales"]);
-const json=(b:unknown,s=200)=>new Response(JSON.stringify(b),{status:s,headers:{...cors,"Content-Type":"application/json","Cache-Control":"no-store"}});
-const money=(v:unknown)=>new Intl.NumberFormat("en-US",{style:"currency",currency:"USD"}).format(Number(v||0));
-const render=(s:string,v:Record<string,string>)=>s.replace(/{{\s*([a-z_]+)\s*}}/g,(_,k)=>v[k]??"");
-Deno.serve(async(req:Request)=>{if(req.method==="OPTIONS")return new Response("ok",{headers:cors});if(req.method!=="POST")return json({error:"Method not allowed"},405);const url=Deno.env.get("SUPABASE_URL"),anon=Deno.env.get("SUPABASE_ANON_KEY"),service=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");if(!url||!anon||!service)return json({error:"Server configuration missing"},500);const admin=createClient(url,service,{auth:{persistSession:false}});let b:any={};try{b=await req.json();}catch{}const processQueue=b.mode==="process_queue";const auth=req.headers.get("Authorization")??"";const isService=auth===`Bearer ${service}`;let callerCompany:string|null=null;if(processQueue&&!isService)return json({error:"Service authorization required"},401);if(!processQueue){if(!isService){const uc=createClient(url,anon,{global:{headers:{Authorization:auth}},auth:{persistSession:false}});const{data:u}=await uc.auth.getUser();if(!u.user)return json({error:"Unauthorized"},401);const{data:p}=await admin.from("profiles").select("company_id,role,is_active").eq("id",u.user.id).single();if(!p||p.is_active!==true||!p.company_id||!STAFF.has(p.role))return json({error:"Active staff access required"},403);callerCompany=p.company_id;}if(!b.retry_communication_id)return json({error:"Only retry is available to staff; lifecycle events are generated server-side"},400);const{data:r}=await admin.from("communications").select("company_id,status").eq("id",b.retry_communication_id).single();if(!r||(!isService&&r.company_id!==callerCompany))return json({error:"Forbidden"},403);if(r.status!=="failed")return json({ok:true,status:r.status,already_processed:true});await admin.from("communications").update({status:"queued",error_message:null,retry_count:0}).eq("id",b.retry_communication_id);}if(processQueue){const now=Date.now(),lo=new Date(now+20*3600000).toISOString(),hi=new Date(now+28*3600000).toISOString();const{data:jobs}=await admin.from("jobs").select("id,company_id,customer_id,quote_id,scheduled_start").in("status",["scheduled","confirmed"]).gte("scheduled_start",lo).lte("scheduled_start",hi);for(const j of jobs??[]){if(!j.customer_id)continue;await admin.from("communications").insert({company_id:j.company_id,customer_id:j.customer_id,quote_id:j.quote_id,job_id:j.id,channel:"email",direction:"outbound",provider:"resend",status:"queued",event_type:"move_reminder",idempotency_key:`move_reminder:${j.id}:${String(j.scheduled_start).slice(0,10)}`,related_object_type:"job",related_object_id:j.id,metadata:{move_date:j.scheduled_start}});}}const q=admin.from("communications").select("*").eq("channel","email").eq("direction","outbound").eq("status","queued").order("created_at",{ascending:true}).limit(processQueue?25:1);if(!processQueue)q.eq("id",b.retry_communication_id);const{data:rows,error:qerr}=await q;if(qerr)return json({error:"Queue query failed"},500);const apiKey=Deno.env.get("RESEND_API_KEY"),configuredFrom=Deno.env.get("CUSTOMER_EMAIL_FROM");let sent=0,failed=0;for(const row of rows??[]){const{data:c}=await admin.from("customers").select("first_name,email").eq("id",row.customer_id).single();const{data:bp}=await admin.from("business_profile").select("business_name,email,website").eq("company_id",row.company_id).maybeSingle();const{data:t}=await admin.from("message_templates").select("id,subject,body").eq("company_id",row.company_id).eq("channel","email").eq("name",row.event_type).eq("is_active",true).maybeSingle();if(!c?.email||!t){await admin.from("communications").update({status:"failed",error_message:!c?.email?"Customer email missing":"Email template missing",last_attempt_at:new Date().toISOString()}).eq("id",row.id);failed++;continue;}let meta=row.metadata??{};if(row.job_id&&!meta.move_date){const{data:j}=await admin.from("jobs").select("scheduled_start").eq("id",row.job_id).maybeSingle();meta={...meta,move_date:j?.scheduled_start??""};}const portal=bp?.website?`${String(bp.website).replace(/\/$/,"")}/portal`:"";const vars={first_name:c.first_name??"there",move_date:String(meta.move_date??"").slice(0,10),amount:money(meta.amount),invoice_number:String(meta.invoice_number??""),action_url:String(meta.action_url??portal)};const subject=render(t.subject??"Southern Magnolia Moving update",vars),body=render(t.body,vars),from=configuredFrom||bp?.email;if(!apiKey||!from){await admin.from("communications").update({status:"failed",subject,body,to_address:c.email,from_address:from??null,template_id:t.id,error_message:"Email provider configuration missing",last_attempt_at:new Date().toISOString()}).eq("id",row.id);failed++;continue;}try{const r=await fetch("https://api.resend.com/emails",{method:"POST",headers:{Authorization:`Bearer ${apiKey}`,"Content-Type":"application/json","Idempotency-Key":row.idempotency_key},body:JSON.stringify({from,to:[c.email],subject,text:body})});const out=await r.json();if(!r.ok)throw new Error(out?.message||`Provider HTTP ${r.status}`);await admin.from("communications").update({status:"sent",subject,body,to_address:c.email,from_address:from,template_id:t.id,provider_message_id:out.id??null,sent_at:new Date().toISOString(),last_attempt_at:new Date().toISOString(),error_message:null}).eq("id",row.id);sent++;}catch(e){await admin.from("communications").update({status:"failed",subject,body,to_address:c.email,from_address:from,template_id:t.id,error_message:e instanceof Error?e.message:"Email delivery failed",last_attempt_at:new Date().toISOString(),retry_count:Number(row.retry_count||0)+1}).eq("id",row.id);failed++;}}return json({ok:true,processed:(rows??[]).length,sent,failed});});
+
+const cors = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-customer-email-cron-secret",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+const STAFF = new Set(["owner", "operations_manager", "dispatcher", "sales"]);
+const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { ...cors, "Content-Type": "application/json", "Cache-Control": "no-store" } });
+const money = (v: unknown) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(Number(v || 0));
+const render = (s: string, v: Record<string, string>) => s.replace(/{{\s*([a-z_]+)\s*}}/g, (_, k) => v[k] ?? "");
+
+Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
+  if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
+
+  const url = Deno.env.get("SUPABASE_URL");
+  const anon = Deno.env.get("SUPABASE_ANON_KEY");
+  const service = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!url || !anon || !service) return json({ error: "Server configuration missing" }, 500);
+
+  const admin = createClient(url, service, { auth: { persistSession: false } });
+  let b: any = {};
+  try { b = await req.json(); } catch {}
+
+  const processQueue = b.mode === "process_queue";
+  const auth = req.headers.get("Authorization") ?? "";
+  const isService = auth === `Bearer ${service}`;
+  let cronAuthorized = false;
+
+  if (processQueue && !isService) {
+    const cronSecret = req.headers.get("x-customer-email-cron-secret") ?? "";
+    if (cronSecret) {
+      const { data: verified, error: verifyError } = await admin.rpc("_verify_customer_email_cron_secret", { p_secret: cronSecret });
+      cronAuthorized = verifyError == null && verified === true;
+    }
+    if (!cronAuthorized) return json({ error: "Service authorization required" }, 401);
+  }
+
+  let callerCompany: string | null = null;
+  if (!processQueue) {
+    if (!isService) {
+      const uc = createClient(url, anon, { global: { headers: { Authorization: auth } }, auth: { persistSession: false } });
+      const { data: u } = await uc.auth.getUser();
+      if (!u.user) return json({ error: "Unauthorized" }, 401);
+      const { data: p } = await admin.from("profiles").select("company_id,role,is_active").eq("id", u.user.id).single();
+      if (!p || p.is_active !== true || !p.company_id || !STAFF.has(p.role)) return json({ error: "Active staff access required" }, 403);
+      callerCompany = p.company_id;
+    }
+    if (!b.retry_communication_id) return json({ error: "Only retry is available to staff; lifecycle events are generated server-side" }, 400);
+    const { data: r } = await admin.from("communications").select("company_id,status").eq("id", b.retry_communication_id).single();
+    if (!r || (!isService && r.company_id !== callerCompany)) return json({ error: "Forbidden" }, 403);
+    if (r.status !== "failed") return json({ ok: true, status: r.status, already_processed: true });
+    await admin.from("communications").update({ status: "queued", error_message: null, retry_count: 0 }).eq("id", b.retry_communication_id);
+  }
+
+  if (processQueue) {
+    const now = Date.now(), lo = new Date(now + 20 * 3600000).toISOString(), hi = new Date(now + 28 * 3600000).toISOString();
+    const { data: jobs } = await admin.from("jobs").select("id,company_id,customer_id,quote_id,scheduled_start").in("status", ["scheduled", "confirmed"]).gte("scheduled_start", lo).lte("scheduled_start", hi);
+    for (const j of jobs ?? []) {
+      if (!j.customer_id) continue;
+      await admin.from("communications").insert({
+        company_id: j.company_id, customer_id: j.customer_id, quote_id: j.quote_id, job_id: j.id,
+        channel: "email", direction: "outbound", provider: "resend", status: "queued", event_type: "move_reminder",
+        idempotency_key: `move_reminder:${j.id}:${String(j.scheduled_start).slice(0, 10)}`,
+        related_object_type: "job", related_object_id: j.id, metadata: { move_date: j.scheduled_start },
+      });
+    }
+  }
+
+  const q = admin.from("communications").select("*").eq("channel", "email").eq("direction", "outbound").eq("status", "queued").order("created_at", { ascending: true }).limit(processQueue ? 25 : 1);
+  if (!processQueue) q.eq("id", b.retry_communication_id);
+  const { data: rows, error: qerr } = await q;
+  if (qerr) return json({ error: "Queue query failed" }, 500);
+
+  const apiKey = Deno.env.get("RESEND_API_KEY"), configuredFrom = Deno.env.get("CUSTOMER_EMAIL_FROM");
+  let sent = 0, failed = 0;
+  for (const row of rows ?? []) {
+    const { data: c } = await admin.from("customers").select("first_name,email").eq("id", row.customer_id).single();
+    const { data: bp } = await admin.from("business_profile").select("business_name,email,website").eq("company_id", row.company_id).maybeSingle();
+    const { data: t } = await admin.from("message_templates").select("id,subject,body").eq("company_id", row.company_id).eq("channel", "email").eq("name", row.event_type).eq("is_active", true).maybeSingle();
+    if (!c?.email || !t) {
+      await admin.from("communications").update({ status: "failed", error_message: !c?.email ? "Customer email missing" : "Email template missing", last_attempt_at: new Date().toISOString() }).eq("id", row.id);
+      failed++;
+      continue;
+    }
+    let meta = row.metadata ?? {};
+    if (row.job_id && !meta.move_date) {
+      const { data: j } = await admin.from("jobs").select("scheduled_start").eq("id", row.job_id).maybeSingle();
+      meta = { ...meta, move_date: j?.scheduled_start ?? "" };
+    }
+    const portal = bp?.website ? `${String(bp.website).replace(/\/$/, "")}/portal` : "";
+    const vars = { first_name: c.first_name ?? "there", move_date: String(meta.move_date ?? "").slice(0, 10), amount: money(meta.amount), invoice_number: String(meta.invoice_number ?? ""), action_url: String(meta.action_url ?? portal) };
+    const subject = render(t.subject ?? "Southern Magnolia Moving update", vars), body = render(t.body, vars), from = configuredFrom || bp?.email;
+    if (!apiKey || !from) {
+      await admin.from("communications").update({ status: "failed", subject, body, to_address: c.email, from_address: from ?? null, template_id: t.id, error_message: "Email provider configuration missing", last_attempt_at: new Date().toISOString() }).eq("id", row.id);
+      failed++;
+      continue;
+    }
+    try {
+      const r = await fetch("https://api.resend.com/emails", { method: "POST", headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", "Idempotency-Key": row.idempotency_key }, body: JSON.stringify({ from, to: [c.email], subject, text: body }) });
+      const out = await r.json();
+      if (!r.ok) throw new Error(out?.message || `Provider HTTP ${r.status}`);
+      await admin.from("communications").update({ status: "sent", subject, body, to_address: c.email, from_address: from, template_id: t.id, provider_message_id: out.id ?? null, sent_at: new Date().toISOString(), last_attempt_at: new Date().toISOString(), error_message: null }).eq("id", row.id);
+      sent++;
+    } catch (e) {
+      await admin.from("communications").update({ status: "failed", subject, body, to_address: c.email, from_address: from, template_id: t.id, error_message: e instanceof Error ? e.message : "Email delivery failed", last_attempt_at: new Date().toISOString(), retry_count: Number(row.retry_count || 0) + 1 }).eq("id", row.id);
+      failed++;
+    }
+  }
+  return json({ ok: true, processed: (rows ?? []).length, sent, failed });
+});
