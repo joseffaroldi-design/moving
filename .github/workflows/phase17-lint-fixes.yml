@@ -1,0 +1,66 @@
+name: Phase 17 lint fixes
+
+on:
+  push:
+    branches: [phase17-ci-route-hardening]
+    paths:
+      - .github/workflows/phase17-lint-fixes.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: phase17-ci-route-hardening
+
+      - name: Apply exact lint fixes
+        shell: python
+        run: |
+          from pathlib import Path
+
+          replacements = {
+              "frontend/src/app/dashboard/quotes/page.tsx": [
+                  ('if (!quote) return <Drawer open={false} onClose={onClose} title="" children={null} />;',
+                   'if (!quote) return <Drawer open={false} onClose={onClose} title="">{null}</Drawer>;'),
+              ],
+              "frontend/src/app/service-areas/page.tsx": [
+                  ('<a href="/#estimate" className="group inline-flex items-center justify-center gap-2 rounded-sm bg-gold px-6 py-3.5 text-sm font-semibold uppercase tracking-wide text-navy transition-colors hover:bg-gold-hover">',
+                   '<Link href="/#estimate" className="group inline-flex items-center justify-center gap-2 rounded-sm bg-gold px-6 py-3.5 text-sm font-semibold uppercase tracking-wide text-navy transition-colors hover:bg-gold-hover">'),
+                  ('</a>\n                <a href={BRAND.phoneHref}', '</Link>\n                <a href={BRAND.phoneHref}'),
+              ],
+              "frontend/src/components/marketing/SiteHeader.tsx": [
+                  ('import { useEffect, useState } from "react";\n', 'import { useEffect, useState } from "react";\nimport Link from "next/link";\n'),
+                  ('<a href="/" aria-label="Southern Magnolia Movers — home" data-testid="header-logo">', '<Link href="/" aria-label="Southern Magnolia Movers — home" data-testid="header-logo">'),
+                  ('</a>\n\n        <nav className="hidden items-center gap-8 lg:flex"', '</Link>\n\n        <nav className="hidden items-center gap-8 lg:flex"'),
+                  ('<a href="/#services" onClick={() => setMenuOpen(false)} className="rounded-sm px-2 py-3 text-navy/80 hover:bg-gold/10 hover:text-navy">Services</a>', '<Link href="/#services" onClick={() => setMenuOpen(false)} className="rounded-sm px-2 py-3 text-navy/80 hover:bg-gold/10 hover:text-navy">Services</Link>'),
+              ],
+              "frontend/tailwind.config.ts": [
+                  ('import type { Config } from "tailwindcss";\n', 'import type { Config } from "tailwindcss";\nimport animate from "tailwindcss-animate";\n'),
+                  ('plugins: [require("tailwindcss-animate")],', 'plugins: [animate],'),
+              ],
+          }
+
+          for file_name, pairs in replacements.items():
+              path = Path(file_name)
+              text = path.read_text()
+              for old, new in pairs:
+                  if old not in text:
+                      raise SystemExit(f"Expected text not found in {file_name}: {old[:120]}")
+                  text = text.replace(old, new, 1)
+              path.write_text(text)
+
+          workflow = Path('.github/workflows/phase17-lint-fixes.yml')
+          workflow.unlink()
+
+      - name: Commit fixes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- frontend/src/app/dashboard/quotes/page.tsx frontend/src/app/service-areas/page.tsx frontend/src/components/marketing/SiteHeader.tsx frontend/tailwind.config.ts .github/workflows/phase17-lint-fixes.yml
+          git commit -m "Fix blocking frontend lint errors"
+          git push origin HEAD:phase17-ci-route-hardening
