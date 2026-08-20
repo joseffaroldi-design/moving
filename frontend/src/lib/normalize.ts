@@ -1,9 +1,5 @@
 import type { NormalizedDashboard } from "./types";
 
-// The mvp-dashboard Edge Function shape is confirmed at runtime. This
-// normalizer defensively maps a range of likely key spellings into the
-// typed structure the UI consumes, so the app stays resilient to shape drift.
-
 type AnyObj = Record<string, unknown>;
 
 function asObj(v: unknown): AnyObj {
@@ -22,7 +18,6 @@ function num(v: unknown, fallback = 0): number {
   return fallback;
 }
 
-// Pick the first defined value across candidate keys.
 function pick(obj: AnyObj, keys: string[]): unknown {
   for (const k of keys) {
     if (obj[k] !== undefined && obj[k] !== null) return obj[k];
@@ -39,43 +34,25 @@ function countOf(source: AnyObj, arr: AnyObj[], keys: string[]): number {
 
 export function normalizeDashboard(raw: unknown): NormalizedDashboard {
   const root = asObj(raw);
-  // Data may live at root or under a `data` / `dashboard` envelope.
   const d = { ...asObj(root.data), ...asObj(root.dashboard), ...root };
-
   const counts = asObj(pick(d, ["counts", "metrics", "stats", "summary"]));
+  const reporting = asObj(pick(d, ["reporting", "report_summary", "reportSummary"]));
 
-  const recentLeads = asArray(
-    pick(d, ["recent_leads", "recentLeads", "leads"])
-  );
-  const recentQuotes = asArray(
-    pick(d, ["recent_quotes", "recentQuotes", "quotes"])
-  );
-  const upcomingJobs = asArray(
-    pick(d, ["upcoming_jobs", "upcomingJobs", "jobs"])
-  );
+  const recentLeads = asArray(pick(d, ["recent_leads", "recentLeads", "leads"]));
+  const recentQuotes = asArray(pick(d, ["recent_quotes", "recentQuotes", "quotes"]));
+  const upcomingJobs = asArray(pick(d, ["upcoming_jobs", "upcomingJobs", "jobs"]));
   const trucks = asArray(pick(d, ["trucks", "fleet"]));
   const customers = asArray(pick(d, ["customers", "recent_customers", "recentCustomers"]));
   const dispatchAssignments = asArray(
-    pick(d, [
-      "dispatch_assignments",
-      "dispatchAssignments",
-      "assignments",
-      "dispatch",
-    ])
+    pick(d, ["dispatch_assignments", "dispatchAssignments", "assignments", "dispatch"])
   );
   const stepsRaw = asArray(
-    pick(d, [
-      "onboarding_steps",
-      "onboardingSteps",
-      "onboarding",
-      "company_onboarding_steps",
-    ])
+    pick(d, ["onboarding_steps", "onboardingSteps", "onboarding", "company_onboarding_steps"])
   );
 
   const onboardingObj = asObj(pick(d, ["onboarding"]));
   const stepsFromObj = asArray(onboardingObj.steps);
   const steps = stepsRaw.length ? stepsRaw : stepsFromObj;
-
   const completed = steps.filter((s) => {
     const done = pick(s, ["completed", "is_complete", "done", "is_completed"]);
     if (typeof done === "boolean") return done;
@@ -83,8 +60,7 @@ export function normalizeDashboard(raw: unknown): NormalizedDashboard {
     return st === "completed" || st === "complete" || st === "done";
   }).length;
 
-  const company =
-    asObj(pick(d, ["company"])) || null;
+  const company = asObj(pick(d, ["company"])) || null;
 
   return {
     company:
@@ -95,42 +71,31 @@ export function normalizeDashboard(raw: unknown): NormalizedDashboard {
           }
         : null,
     counts: {
-      customers: countOf(counts, asArray(pick(d, ["customers"])), [
-        "customers",
-        "customer_count",
-        "customers_count",
-        "total_customers",
-      ]),
-      leads: countOf(counts, recentLeads, [
-        "leads",
-        "lead_count",
-        "leads_count",
-        "total_leads",
-      ]),
-      quotes: countOf(counts, recentQuotes, [
-        "quotes",
-        "quote_count",
-        "quotes_count",
-        "total_quotes",
-      ]),
-      jobs: countOf(counts, upcomingJobs, [
-        "jobs",
-        "job_count",
-        "jobs_count",
-        "total_jobs",
-      ]),
-      dispatchAssignments: countOf(counts, dispatchAssignments, [
-        "dispatch_assignments",
-        "dispatchAssignments",
-        "assignments",
-        "dispatch_count",
-      ]),
-      trucks: countOf(counts, trucks, [
-        "trucks",
-        "truck_count",
-        "trucks_count",
-        "total_trucks",
-      ]),
+      customers: countOf(counts, asArray(pick(d, ["customers"])), ["customers", "customer_count", "customers_count", "total_customers"]),
+      leads: countOf(counts, recentLeads, ["leads", "lead_count", "leads_count", "total_leads"]),
+      quotes: countOf(counts, recentQuotes, ["quotes", "quote_count", "quotes_count", "total_quotes"]),
+      jobs: countOf(counts, upcomingJobs, ["jobs", "job_count", "jobs_count", "total_jobs"]),
+      dispatchAssignments: countOf(counts, dispatchAssignments, ["dispatch_assignments", "dispatchAssignments", "assignments", "dispatch_count"]),
+      trucks: countOf(counts, trucks, ["trucks", "truck_count", "trucks_count", "total_trucks"]),
+    },
+    reporting: {
+      leadCount: num(pick(reporting, ["lead_count"])),
+      quotedLeadCount: num(pick(reporting, ["quoted_lead_count"])),
+      quotesSentCount: num(pick(reporting, ["quotes_sent_count"])),
+      quotesDecidedCount: num(pick(reporting, ["quotes_decided_count"])),
+      quotesWonCount: num(pick(reporting, ["quotes_won_count"])),
+      jobsFromQuotesCount: num(pick(reporting, ["jobs_from_quotes_count"])),
+      upcomingJobsCount: num(pick(reporting, ["upcoming_jobs_count"])),
+      dispatchedUpcomingJobsCount: num(pick(reporting, ["dispatched_upcoming_jobs_count"])),
+      openPipelineValue: num(pick(reporting, ["open_pipeline_value"])),
+      averageQuoteValue: num(pick(reporting, ["average_quote_value"])),
+      collectedRevenue: num(pick(reporting, ["collected_revenue"])),
+      unpaidInvoiceCount: num(pick(reporting, ["unpaid_invoice_count"])),
+      unpaidInvoiceBalance: num(pick(reporting, ["unpaid_invoice_balance"])),
+      laborHours: num(pick(reporting, ["labor_hours"])),
+      completedJobBilled: num(pick(reporting, ["completed_job_billed"])),
+      completedJobExpenses: num(pick(reporting, ["completed_job_expenses"])),
+      basicJobMargin: num(pick(reporting, ["basic_job_margin"])),
     },
     onboarding: {
       completed: num(pick(onboardingObj, ["completed"]), completed),
@@ -142,8 +107,7 @@ export function normalizeDashboard(raw: unknown): NormalizedDashboard {
     upcomingJobs: upcomingJobs as NormalizedDashboard["upcomingJobs"],
     trucks: trucks as NormalizedDashboard["trucks"],
     customers: customers as NormalizedDashboard["customers"],
-    dispatchAssignments:
-      dispatchAssignments as NormalizedDashboard["dispatchAssignments"],
+    dispatchAssignments: dispatchAssignments as NormalizedDashboard["dispatchAssignments"],
     raw,
   };
 }
