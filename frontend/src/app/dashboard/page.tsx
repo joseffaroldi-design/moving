@@ -30,7 +30,7 @@ import { UnpaidInvoicesCard } from "@/components/invoices/UnpaidInvoicesCard";
 export default function DashboardPage() {
   const { data, loading, error, refetch } = useDashboardData();
 
-  const revenue = (data?.recentQuotes ?? []).reduce(
+  const recentQuoteValue = (data?.recentQuotes ?? []).reduce(
     (sum, q) => sum + (Number(q.total ?? q.subtotal) || 0),
     0
   );
@@ -43,7 +43,6 @@ export default function DashboardPage() {
         breadcrumbs={[{ label: "Operations" }, { label: "Dashboard" }]}
       />
 
-      {/* Branded welcome banner */}
       <div className="mb-6 flex items-center gap-4 overflow-hidden rounded-md border border-navy-800 bg-navy px-5 py-4">
         <CrescentMark className="hidden h-11 w-11 shrink-0 sm:block" />
         <div className="flex-1">
@@ -68,7 +67,6 @@ export default function DashboardPage() {
         />
       ) : (
         <div className="space-y-6">
-          {/* Stat cards */}
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             {loading || !data ? (
               Array.from({ length: 8 }).map((_, i) => <StatCardSkeleton key={i} />)
@@ -80,7 +78,7 @@ export default function DashboardPage() {
                 <StatCard label="Jobs" value={data.counts.jobs} icon={Briefcase} data-testid="stat-jobs" />
                 <StatCard label="Dispatch" value={data.counts.dispatchAssignments} icon={CalendarClock} data-testid="stat-dispatch" />
                 <StatCard label="Trucks" value={data.counts.trucks} icon={Truck} data-testid="stat-trucks" />
-                <StatCard label="Pipeline Revenue" value={formatCurrency(revenue)} icon={DollarSign} data-testid="stat-revenue" />
+                <StatCard label="Recent Quote Value" value={formatCurrency(recentQuoteValue)} icon={DollarSign} data-testid="stat-revenue" />
                 <StatCard label="Upcoming Moves" value={data.upcomingJobs.length} icon={CalendarCheck} data-testid="stat-upcoming" />
               </>
             )}
@@ -89,7 +87,6 @@ export default function DashboardPage() {
           <UnpaidInvoicesCard />
 
           <div className="grid gap-6 lg:grid-cols-3">
-            {/* Recent leads */}
             <Card className="lg:col-span-2">
               <CardHeader
                 title="Recent Leads"
@@ -131,7 +128,6 @@ export default function DashboardPage() {
               )}
             </Card>
 
-            {/* Onboarding */}
             <Card>
               <CardHeader title="Company Setup" />
               <div className="p-4">
@@ -190,7 +186,6 @@ export default function DashboardPage() {
           </div>
 
           <div className="grid gap-6 lg:grid-cols-2">
-            {/* Recent quotes */}
             <Card>
               <CardHeader
                 title="Recent Quotes"
@@ -227,7 +222,6 @@ export default function DashboardPage() {
               )}
             </Card>
 
-            {/* Upcoming jobs */}
             <Card>
               <CardHeader
                 title="Upcoming Jobs"
