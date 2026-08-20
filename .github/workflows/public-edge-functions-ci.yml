@@ -1,0 +1,38 @@
+name: Public Edge Functions CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "supabase/functions/public-lead-intake/**"
+      - "supabase/functions/generate-quote-estimate/**"
+      - "supabase/migrations/**phase18_public_intake_rate_limit.sql"
+      - ".github/workflows/public-edge-functions-ci.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "supabase/functions/public-lead-intake/**"
+      - "supabase/functions/generate-quote-estimate/**"
+      - "supabase/migrations/**phase18_public_intake_rate_limit.sql"
+      - ".github/workflows/public-edge-functions-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Type-check public Edge Functions
+        run: >-
+          deno check
+          supabase/functions/public-lead-intake/index.ts
+          supabase/functions/generate-quote-estimate/index.ts
