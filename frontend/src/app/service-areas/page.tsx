@@ -74,10 +74,10 @@ export default function ServiceAreasPage() {
                 neighborhoods of Kenner, our local crews know the way. Choose your area below.
               </p>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-                <a href="/#estimate" className="group inline-flex items-center justify-center gap-2 rounded-sm bg-gold px-6 py-3.5 text-sm font-semibold uppercase tracking-wide text-navy transition-colors hover:bg-gold-hover">
+                <Link href="/#estimate" className="group inline-flex items-center justify-center gap-2 rounded-sm bg-gold px-6 py-3.5 text-sm font-semibold uppercase tracking-wide text-navy transition-colors hover:bg-gold-hover">
                   Get Free Estimate
                   <ArrowRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />
-                </a>
+                </Link>
                 <a href={BRAND.phoneHref} className="inline-flex items-center justify-center gap-2 rounded-sm border border-cream/25 px-6 py-3.5 text-sm font-medium text-cream transition-colors hover:border-gold hover:text-gold">
                   <Phone className="h-4 w-4" /> Call {BRAND.phone}
                 </a>
