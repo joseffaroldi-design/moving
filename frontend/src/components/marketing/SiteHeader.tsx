@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Phone, ChevronDown, Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BRAND } from "@/lib/brand";
@@ -45,9 +46,9 @@ export function SiteHeader() {
       )}
     >
       <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-3 md:px-10">
-        <a href="/" aria-label="Southern Magnolia Movers — home" data-testid="header-logo">
+        <Link href="/" aria-label="Southern Magnolia Movers — home" data-testid="header-logo">
           <BrandLogo height={scrolled ? 46 : 54} priority className="transition-all duration-500" />
-        </a>
+        </Link>
 
         <nav className="hidden items-center gap-8 lg:flex" aria-label="Primary">
           <div className="group relative">
@@ -120,7 +121,7 @@ export function SiteHeader() {
         data-testid="mobile-menu"
       >
         <nav className="mx-auto flex max-w-7xl flex-col gap-1 px-6 py-4">
-          <a href="/#services" onClick={() => setMenuOpen(false)} className="rounded-sm px-2 py-3 text-navy/80 hover:bg-gold/10 hover:text-navy">Services</a>
+          <Link href="/#services" onClick={() => setMenuOpen(false)} className="rounded-sm px-2 py-3 text-navy/80 hover:bg-gold/10 hover:text-navy">Services</Link>
           {NAV.map((n) => (
             <a
               key={n.href}

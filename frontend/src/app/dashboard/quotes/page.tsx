@@ -795,7 +795,7 @@ function QuoteDetailDrawer({
     }
   }, [quote?.id]);
 
-  if (!quote) return <Drawer open={false} onClose={onClose} title="" children={null} />;
+  if (!quote) return <Drawer open={false} onClose={onClose} title="">{null}</Drawer>;
 
   const isDraft = quote.status === "draft";
   const canSend = ["draft", "sent", "viewed"].includes(quote.status);

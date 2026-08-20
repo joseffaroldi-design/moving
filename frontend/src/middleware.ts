@@ -2,8 +2,45 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
 const PROTECTED = ["/dashboard", "/portal", "/mobile"];
-// Public auth pages that live under a protected prefix must be excluded.
 const PUBLIC_UNDER_PROTECTED = ["/portal/login"];
+
+const STAFF_ROLES = new Set(["owner", "operations_manager", "dispatcher", "sales"]);
+const MOBILE_ROLES = new Set(["owner", "operations_manager", "dispatcher", "crew_lead", "mover"]);
+
+function withRefreshedCookies(response: NextResponse, redirect: NextResponse) {
+  response.cookies.getAll().forEach((c) => redirect.cookies.set(c.name, c.value, c));
+  return redirect;
+}
+
+function roleRedirect(request: NextRequest, response: NextResponse, pathname: string, role: string | null) {
+  const url = request.nextUrl.clone();
+
+  if (!role) {
+    url.pathname = "/unauthorized";
+    url.search = "";
+    return withRefreshedCookies(response, NextResponse.redirect(url));
+  }
+
+  if (pathname.startsWith("/mobile") && !MOBILE_ROLES.has(role)) {
+    url.pathname = role === "customer" ? "/portal" : STAFF_ROLES.has(role) ? "/dashboard" : "/unauthorized";
+    url.search = "";
+    return withRefreshedCookies(response, NextResponse.redirect(url));
+  }
+
+  if (pathname.startsWith("/portal") && role !== "customer") {
+    url.pathname = MOBILE_ROLES.has(role) && !STAFF_ROLES.has(role) ? "/mobile/jobs" : STAFF_ROLES.has(role) ? "/dashboard" : "/unauthorized";
+    url.search = "";
+    return withRefreshedCookies(response, NextResponse.redirect(url));
+  }
+
+  if (pathname.startsWith("/dashboard") && !STAFF_ROLES.has(role)) {
+    url.pathname = role === "customer" ? "/portal" : MOBILE_ROLES.has(role) ? "/mobile/jobs" : "/unauthorized";
+    url.search = "";
+    return withRefreshedCookies(response, NextResponse.redirect(url));
+  }
+
+  return null;
+}
 
 export async function middleware(request: NextRequest) {
   const response = NextResponse.next({ request });
@@ -23,7 +60,6 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  // Do not trust getSession() for auth decisions — getUser() revalidates.
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -38,16 +74,28 @@ export async function middleware(request: NextRequest) {
 
   if (isProtected && !user) {
     const url = request.nextUrl.clone();
-    // Customers get the customer-branded login; staff/crew get the ops login.
     url.pathname = path.startsWith("/portal") ? "/portal/login" : "/login";
     url.searchParams.set("next", path);
-    const redirect = NextResponse.redirect(url);
-    // Carry over any auth cookies Supabase refreshed while validating, so a
-    // token refresh during a protected request cannot cause a redirect loop.
-    response.cookies.getAll().forEach((c) =>
-      redirect.cookies.set(c.name, c.value, c)
-    );
-    return redirect;
+    return withRefreshedCookies(response, NextResponse.redirect(url));
+  }
+
+  if (isProtected && user) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role, is_active")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    const role = typeof profile?.role === "string" ? profile.role : null;
+    if (!profile || profile.is_active !== true) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/unauthorized";
+      url.search = "";
+      return withRefreshedCookies(response, NextResponse.redirect(url));
+    }
+
+    const redirect = roleRedirect(request, response, path, role);
+    if (redirect) return redirect;
   }
 
   return response;
