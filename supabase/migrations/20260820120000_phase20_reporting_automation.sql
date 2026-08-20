@@ -128,6 +128,17 @@ $$;
 revoke all on function public.staff_report_summary() from public, anon;
 grant execute on function public.staff_report_summary() to authenticated;
 
+alter table public.communications
+  drop constraint if exists communications_event_type_check;
+alter table public.communications
+  add constraint communications_event_type_check check (
+    event_type is null or event_type = any(array[
+      'estimate_received','quote_ready','booking_confirmed','deposit_received',
+      'move_reminder','invoice_ready','payment_receipt','review_request',
+      'quote_follow_up','deposit_request'
+    ]::text[])
+  );
+
 insert into public.message_templates (company_id, name, channel, subject, body, is_active)
 select c.id,
        'quote_follow_up',
