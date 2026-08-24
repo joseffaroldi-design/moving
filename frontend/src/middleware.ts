@@ -74,7 +74,11 @@ export async function middleware(request: NextRequest) {
 
   if (isProtected && !user) {
     const url = request.nextUrl.clone();
-    url.pathname = path.startsWith("/portal") ? "/portal/login" : "/login";
+    url.pathname = path.startsWith("/portal")
+      ? "/portal/login"
+      : path.startsWith("/mobile")
+        ? "/crew/login"
+        : "/login";
     url.searchParams.set("next", path);
     return withRefreshedCookies(response, NextResponse.redirect(url));
   }
