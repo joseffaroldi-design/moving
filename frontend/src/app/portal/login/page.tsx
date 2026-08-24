@@ -14,7 +14,7 @@ import { Logo } from "@/components/brand/Logo";
 import { BRAND } from "@/lib/brand";
 
 function safeNext(next: string | null): string {
-  if (!next || !next.startsWith("/") || next.startsWith("//")) return "/portal";
+  if (!next || !next.startsWith("/portal") || next.startsWith("//")) return "/portal";
   return next;
 }
 
@@ -22,17 +22,16 @@ function CustomerLoginInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const next = safeNext(searchParams.get("next"));
-  const { signIn, session, role, loading: authLoading } = useAuth();
+  const { signIn, signOut, session, role, loading: authLoading } = useAuth();
   const toast = useToast();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  // Already signed in → send to the right home (customers to /portal).
   useEffect(() => {
-    if (!authLoading && session) {
-      router.replace(role ? homeForRole(role) : next);
+    if (!authLoading && session && role) {
+      router.replace(role === "customer" ? next : homeForRole(role));
     }
   }, [authLoading, session, role, next, router]);
 
@@ -42,9 +41,13 @@ function CustomerLoginInner() {
     setLoading(true);
     try {
       const { role: signedRole } = await signIn(email, password);
+      if (signedRole && signedRole !== "customer") {
+        await signOut();
+        setErr("This sign-in is for customers. Staff and crew have separate sign-in pages.");
+        return;
+      }
       toast("Signed in successfully.", "success");
-      // Customers land on their portal (or the requested next); other roles go home.
-      router.replace(signedRole === "customer" || !signedRole ? next : homeForRole(signedRole));
+      router.replace(next);
       router.refresh();
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : "Authentication failed.");
@@ -55,7 +58,6 @@ function CustomerLoginInner() {
 
   return (
     <div className="flex min-h-screen bg-cream" data-testid="customer-login">
-      {/* Left: form */}
       <div className="flex w-full flex-col justify-between px-6 py-8 sm:px-12 lg:w-[46%]">
         <Logo variant="dark" />
 
@@ -63,9 +65,9 @@ function CustomerLoginInner() {
           <p className="mb-1 text-xs font-semibold uppercase tracking-[0.3em] text-gold-hover">
             Customer Portal
           </p>
-          <h1 className="font-serif text-3xl font-bold text-navy">Welcome back</h1>
+          <h1 className="font-serif text-3xl font-bold text-navy">Customer sign in</h1>
           <p className="mt-2 text-sm text-muted">
-            Sign in to view your quotes, track your move, and manage invoices.
+            View your quotes, move schedule, invoices, payments, and documents.
           </p>
 
           <form onSubmit={onSubmit} className="mt-7 space-y-4">
@@ -108,19 +110,24 @@ function CustomerLoginInner() {
             )}
 
             <Button type="submit" variant="navy" className="w-full" size="lg" loading={loading} data-testid="customer-login-submit">
-              Sign in
+              Sign in to Customer Portal
             </Button>
           </form>
 
-          <p className="mt-6 text-center text-sm text-muted">
-            Need access? Contact us and we&apos;ll set up your account.
-          </p>
-          <p className="mt-2 text-center text-xs text-muted">
-            Are you a team member?{" "}
-            <Link href="/login" className="font-semibold text-gold-hover hover:underline" data-testid="staff-login-link">
-              Staff sign in
-            </Link>
-          </p>
+          <div className="mt-6 space-y-2 text-center text-xs text-muted">
+            <p>Need access? Contact us and we&apos;ll help with your account.</p>
+            <p>
+              Office team?{" "}
+              <Link href="/login" className="font-semibold text-gold-hover hover:underline" data-testid="staff-login-link">
+                Staff sign in
+              </Link>
+              {" · "}
+              Crew member?{" "}
+              <Link href="/crew/login" className="font-semibold text-gold-hover hover:underline" data-testid="crew-login-link">
+                Crew sign in
+              </Link>
+            </p>
+          </div>
         </div>
 
         <div className="flex flex-col gap-1 text-xs text-muted sm:flex-row sm:items-center sm:gap-5">
@@ -133,7 +140,6 @@ function CustomerLoginInner() {
         </div>
       </div>
 
-      {/* Right: brand art */}
       <div className="relative hidden overflow-hidden bg-navy lg:block lg:w-[54%]">
         <Image
           src="/brand/login-art.jpg"
@@ -148,7 +154,7 @@ function CustomerLoginInner() {
             {BRAND.taglinePrimary}
           </p>
           <p className="mt-3 max-w-md text-slate-300">
-            Your move with {BRAND.name}, at your fingertips — quotes, schedule, and invoices in one place.
+            Your move with {BRAND.name}, at your fingertips — quotes, schedule, invoices, and documents in one place.
           </p>
         </div>
       </div>
