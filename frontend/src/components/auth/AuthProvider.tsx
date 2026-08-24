@@ -20,6 +20,7 @@ interface AuthContextValue {
   role: Role | string | null;
   error: string | null;
   signIn: (email: string, password: string) => Promise<{ role: string | null }>;
+  signInWithGoogle: (next: string) => Promise<void>;
   signUp: (
     email: string,
     password: string
@@ -109,6 +110,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [supabase, bootstrap]
   );
 
+  const signInWithGoogle = useCallback(
+    async (next: string) => {
+      setError(null);
+      const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
+      const { error: oauthErr } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo },
+      });
+      if (oauthErr) {
+        setError(oauthErr.message);
+        throw oauthErr;
+      }
+    },
+    [supabase]
+  );
+
   const signUp = useCallback(
     async (email: string, password: string) => {
       setError(null);
@@ -171,6 +188,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           null,
         error,
         signIn,
+        signInWithGoogle,
         signUp,
         signOut,
         resetPassword,

@@ -755,3 +755,23 @@ VERDICT: Ready for Owner Use = YES. Ready for Production = YES (deployed & accep
 Reminder: delete throwaway "Test Buyer" lead/customer/quote/job/invoice from production.
 Deferred/optional: automated customer emails, Business Profile logo/terms/brand-color fields,
 real-device responsive pass. Phase 10 not started.
+
+## Google Sign-in (Customer Portal) — 2026-06
+Implemented via **Supabase native Google OAuth** (NOT Emergent-managed auth).
+Rationale: portal/dashboard/mobile are 100% Supabase-auth + RLS; Emergent-managed
+auth yields a separate session that middleware rejects (no Supabase session), and
+there is no service-role key to bridge it. Supabase Google OAuth creates a real
+auth.users user that flows through existing middleware, roles, RLS, and reuses the
+existing portal_activate_customer_account self-activation RPC.
+Code: frontend/src/app/auth/callback/route.ts (PKCE code exchange + activation RPC),
+AuthProvider.signInWithGoogle(), "Continue with Google" button on /portal/login.
+STATUS: code complete + builds; button renders; OAuth initiates. NOT end-to-end
+testable by agent because the Google provider is owner-configured only.
+OWNER SETUP REQUIRED (one-time):
+  1. Google Cloud Console: create OAuth 2.0 Client (Web). Authorized redirect URI:
+     https://yrvgovkkukmtdmgejtxc.supabase.co/auth/v1/callback
+  2. Supabase → Authentication → Providers → Google: enable, paste Client ID+Secret.
+  3. Supabase → Authentication → URL Configuration → Redirect URLs allowlist:
+     https://southernmagnoliamovers.com/auth/callback  (+ preview origin /auth/callback)
+     Site URL: https://southernmagnoliamovers.com
+Then redeploy for production.
