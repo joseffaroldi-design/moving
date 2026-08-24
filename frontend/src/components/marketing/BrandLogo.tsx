@@ -14,7 +14,7 @@ export function BrandLogo({
   plaque?: boolean;
   priority?: boolean;
 }) {
-  const width = Math.round((height * 1555) / 592);
+  const width = Math.round((height * 1800) / 716);
   const img = (
     <Image
       src="/brand/logo-lockup.png"
