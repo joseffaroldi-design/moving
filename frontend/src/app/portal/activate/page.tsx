@@ -3,7 +3,7 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { CheckCircle2, Mail, Phone, ShieldCheck } from "lucide-react";
 import { getBrowserClient } from "@/lib/supabase/client";
 import { Input, Label } from "@/components/ui/input";
@@ -13,7 +13,6 @@ import { BRAND } from "@/lib/brand";
 
 export default function CustomerPortalActivatePage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const supabase = getBrowserClient();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -106,8 +105,7 @@ export default function CustomerPortalActivatePage() {
     );
   }
 
-  const finishingExistingSession =
-    checkingSession || searchParams.get("complete") === "1" && loading;
+  const finishingExistingSession = checkingSession || (loading && !confirmationSent);
 
   return (
     <div className="flex min-h-screen bg-cream" data-testid="customer-activate">
@@ -216,12 +214,6 @@ export default function CustomerPortalActivatePage() {
                 Activate Customer Portal
               </Button>
             </form>
-          )}
-
-          {error && confirmationSent && (
-            <p className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-              {error}
-            </p>
           )}
 
           <div className="mt-6 text-center text-xs text-muted">
