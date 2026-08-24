@@ -41,13 +41,13 @@ export function SiteHeader() {
       className={cn(
         "fixed inset-x-0 top-0 z-50 transition-[background-color,box-shadow,border-color] duration-500",
         scrolled
-          ? "border-b border-navy/10 bg-cream shadow-[0_6px_24px_rgb(14,42,74,0.08)]"
-          : "border-b border-navy/[0.08] bg-cream"
+          ? "border-b border-navy/20 bg-[#EAD9AE] shadow-[0_8px_28px_rgb(14,42,74,0.16)]"
+          : "border-b border-navy/15 bg-[#EEDFB8]"
       )}
     >
       <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-3 md:px-10">
         <Link href="/" aria-label="Southern Magnolia Movers — home" data-testid="header-logo">
-          <BrandLogo height={scrolled ? 46 : 54} priority className="transition-all duration-500" />
+          <BrandLogo height={scrolled ? 62 : 74} priority className="transition-all duration-500" />
         </Link>
 
         <nav className="hidden items-center gap-8 lg:flex" aria-label="Primary">
@@ -115,7 +115,7 @@ export function SiteHeader() {
       {/* Mobile menu */}
       <div
         className={cn(
-          "overflow-hidden border-t border-navy/10 bg-cream-100 transition-[max-height,opacity] duration-500 lg:hidden",
+          "overflow-hidden border-t border-navy/15 bg-[#EEDFB8] transition-[max-height,opacity] duration-500 lg:hidden",
           menuOpen ? "max-h-[70vh] opacity-100" : "max-h-0 opacity-0"
         )}
         data-testid="mobile-menu"
