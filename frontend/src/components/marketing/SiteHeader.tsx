@@ -41,31 +41,31 @@ export function SiteHeader() {
       className={cn(
         "fixed inset-x-0 top-0 z-50 transition-[background-color,box-shadow,border-color] duration-500",
         scrolled
-          ? "border-b border-navy/10 bg-cream shadow-[0_6px_24px_rgb(14,42,74,0.08)]"
-          : "border-b border-navy/[0.08] bg-cream"
+          ? "border-b border-navy/10 bg-cream shadow-[0_6px_24px_rgb(14,42,74,0.08)] lg:bg-cream/95 lg:backdrop-blur-md lg:shadow-[0_10px_40px_rgb(14,42,74,0.10)]"
+          : "border-b border-navy/[0.08] bg-cream lg:bg-cream/95 lg:backdrop-blur-md"
       )}
     >
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-3 md:px-10">
-        <Link href="/" aria-label="Southern Magnolia Movers — home" data-testid="header-logo">
-          <BrandLogo height={scrolled ? 46 : 54} priority className="transition-all duration-500" />
+      <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-3 md:px-10 lg:max-w-[1440px] lg:px-12 lg:py-4 xl:px-16">
+        <Link href="/" aria-label="Southern Magnolia Movers — home" data-testid="header-logo" className="lg:flex lg:min-w-[210px] lg:items-center">
+          <BrandLogo height={scrolled ? 46 : 54} priority className="transition-all duration-500 lg:scale-[1.06] lg:origin-left" />
         </Link>
 
-        <nav className="hidden items-center gap-8 lg:flex" aria-label="Primary">
+        <nav className="hidden items-center gap-8 lg:flex lg:gap-6 xl:gap-8" aria-label="Primary">
           <div className="group relative">
             <button
-              className="inline-flex items-center gap-1 py-2 text-sm font-medium text-navy/80 transition-colors hover:text-navy"
+              className="inline-flex items-center gap-1 py-2 text-sm font-medium text-navy/80 transition-colors hover:text-navy lg:relative lg:after:absolute lg:after:inset-x-0 lg:after:-bottom-0.5 lg:after:h-px lg:after:origin-center lg:after:scale-x-0 lg:after:bg-gold lg:after:transition-transform lg:after:duration-300 lg:hover:after:scale-x-100"
               data-testid="nav-services"
             >
               Services
               <ChevronDown className="h-3.5 w-3.5 transition-transform duration-300 group-hover:rotate-180" />
             </button>
             <div className="invisible absolute left-1/2 top-full w-60 -translate-x-1/2 translate-y-1 pt-2 opacity-0 transition-all duration-300 group-hover:visible group-hover:translate-y-0 group-hover:opacity-100">
-              <div className="rounded-sm border border-navy/10 bg-cream-100 p-2 shadow-[0_12px_40px_rgb(14,42,74,0.14)]">
+              <div className="rounded-sm border border-navy/10 bg-cream-100 p-2 shadow-[0_12px_40px_rgb(14,42,74,0.14)] lg:w-64 lg:p-3 lg:shadow-[0_20px_60px_rgb(14,42,74,0.16)]">
                 {SERVICES.map((s) => (
                   <a
                     key={s.label}
                     href={s.href}
-                    className="block rounded-sm px-3 py-2 text-sm text-navy/75 transition-colors hover:bg-gold/10 hover:text-navy"
+                    className="block rounded-sm px-3 py-2 text-sm text-navy/75 transition-colors hover:bg-gold/10 hover:text-navy lg:px-4 lg:py-2.5"
                   >
                     {s.label}
                   </a>
@@ -77,18 +77,18 @@ export function SiteHeader() {
             <a
               key={n.href}
               href={n.href}
-              className="py-2 text-sm font-medium text-navy/80 transition-colors hover:text-navy"
+              className="py-2 text-sm font-medium text-navy/80 transition-colors hover:text-navy lg:relative lg:after:absolute lg:after:inset-x-0 lg:after:-bottom-0.5 lg:after:h-px lg:after:origin-center lg:after:scale-x-0 lg:after:bg-gold lg:after:transition-transform lg:after:duration-300 lg:hover:after:scale-x-100"
             >
               {n.label}
             </a>
           ))}
         </nav>
 
-        <div className="flex items-center gap-2 md:gap-3">
+        <div className="flex items-center gap-2 md:gap-3 lg:min-w-[330px] lg:justify-end lg:gap-3">
           <a
             href={BRAND.phoneHref}
             data-testid="header-call-btn"
-            className="hidden items-center gap-2 rounded-sm border border-navy/20 px-4 py-2.5 text-sm font-medium text-navy transition-colors hover:border-navy hover:bg-navy hover:text-cream md:inline-flex"
+            className="hidden items-center gap-2 rounded-sm border border-navy/20 px-4 py-2.5 text-sm font-medium text-navy transition-colors hover:border-navy hover:bg-navy hover:text-cream md:inline-flex lg:rounded-full lg:border-navy/15 lg:px-4 lg:shadow-sm"
           >
             <Phone className="h-4 w-4 text-gold-hover" />
             {BRAND.phone}
@@ -96,7 +96,7 @@ export function SiteHeader() {
           <a
             href="#estimate"
             data-testid="header-estimate-btn"
-            className="hidden rounded-sm bg-gold px-5 py-2.5 text-sm font-semibold uppercase tracking-wide text-navy transition-colors hover:bg-gold-hover sm:inline-block"
+            className="hidden rounded-sm bg-gold px-5 py-2.5 text-sm font-semibold uppercase tracking-wide text-navy transition-colors hover:bg-gold-hover sm:inline-block lg:rounded-full lg:px-6 lg:shadow-[0_8px_22px_rgb(200,154,61,0.20)] lg:transition-[background-color,transform,box-shadow] lg:hover:-translate-y-0.5 lg:hover:shadow-[0_12px_28px_rgb(200,154,61,0.28)]"
           >
             Get Free Estimate
           </a>
