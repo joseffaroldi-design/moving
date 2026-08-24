@@ -755,12 +755,3 @@ VERDICT: Ready for Owner Use = YES. Ready for Production = YES (deployed & accep
 Reminder: delete throwaway "Test Buyer" lead/customer/quote/job/invoice from production.
 Deferred/optional: automated customer emails, Business Profile logo/terms/brand-color fields,
 real-device responsive pass. Phase 10 not started.
-
-## Header/logo polish (2026-06, DONE)
-Per owner: darker/richer cream header + larger, more-visible logo. SiteHeader.tsx bg
-cream -> #EEDFB8 (top) / #EAD9AE (scrolled) w/ stronger border+shadow; mobile menu bg
-#EEDFB8. BrandLogo height 54/46 -> 74/62. Kept NAVY wordmark (best contrast on cream;
-a light wordmark would be invisible on cream, so the Q2 "light wordmark" choice was
-intentionally skipped as it conflicts with a cream header). Prod build PASS; screenshot
-verified (logo prominent, navy text crisp). OG share image ("PROJECT PROGRESS UPDATE"
-text) still pending owner decision. Assets uncommitted; use Save to GitHub, exclude .env.
