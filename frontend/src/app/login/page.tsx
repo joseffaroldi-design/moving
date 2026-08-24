@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Phone, Mail } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useToast } from "@/components/ui/toast";
@@ -13,23 +13,44 @@ import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/brand/Logo";
 import { BRAND } from "@/lib/brand";
 
-export default function LoginPage() {
+const STAFF_ROLES = new Set(["owner", "operations_manager", "dispatcher", "sales"]);
+
+function safeNext(next: string | null): string {
+  if (!next || !next.startsWith("/dashboard") || next.startsWith("//")) return "/dashboard";
+  return next;
+}
+
+function StaffLoginInner() {
   const router = useRouter();
-  const { signIn } = useAuth();
+  const searchParams = useSearchParams();
+  const next = safeNext(searchParams.get("next"));
+  const { signIn, signOut, session, role, loading: authLoading } = useAuth();
   const toast = useToast();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!authLoading && session && role) {
+      router.replace(STAFF_ROLES.has(role) ? next : homeForRole(role));
+    }
+  }, [authLoading, session, role, next, router]);
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErr(null);
     setLoading(true);
     try {
-      const { role } = await signIn(email, password);
+      const { role: signedRole } = await signIn(email, password);
+      if (signedRole && !STAFF_ROLES.has(signedRole)) {
+        await signOut();
+        setErr("This sign-in is for office staff. Crew members and customers have separate sign-in pages.");
+        return;
+      }
       toast("Signed in successfully.", "success");
-      router.push(homeForRole(role));
+      router.replace(signedRole ? homeForRole(signedRole) : next);
+      router.refresh();
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : "Authentication failed.");
     } finally {
@@ -38,20 +59,17 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen bg-cream">
-      {/* Left: form */}
+    <div className="flex min-h-screen bg-cream" data-testid="staff-login">
       <div className="flex w-full flex-col justify-between px-6 py-8 sm:px-12 lg:w-[46%]">
         <Logo variant="dark" />
 
         <div className="mx-auto w-full max-w-sm py-8">
           <p className="mb-1 text-xs font-semibold uppercase tracking-[0.3em] text-gold-hover">
-            Operations Portal
+            Staff Dashboard
           </p>
-          <h1 className="font-serif text-3xl font-bold text-navy">
-            Welcome back
-          </h1>
+          <h1 className="font-serif text-3xl font-bold text-navy">Staff sign in</h1>
           <p className="mt-2 text-sm text-muted">
-            Sign in to manage leads, quotes, jobs, and dispatch.
+            Sign in to manage leads, customers, quotes, jobs, dispatch, invoices, and reporting.
           </p>
 
           <form onSubmit={onSubmit} className="mt-7 space-y-4">
@@ -94,19 +112,24 @@ export default function LoginPage() {
             )}
 
             <Button type="submit" variant="navy" className="w-full" size="lg" loading={loading} data-testid="login-submit">
-              Sign in
+              Sign in to Staff Dashboard
             </Button>
           </form>
 
-          <p className="mt-6 text-center text-sm text-muted">
-            Accounts are provisioned by your company administrator.
-          </p>
-          <p className="mt-2 text-center text-xs text-muted">
-            Are you a customer?{" "}
-            <Link href="/portal/login" className="font-semibold text-gold-hover hover:underline" data-testid="customer-login-link">
-              Customer sign in
-            </Link>
-          </p>
+          <div className="mt-6 space-y-2 text-center text-xs text-muted">
+            <p>Accounts are provisioned by your company administrator.</p>
+            <p>
+              Crew member?{" "}
+              <Link href="/crew/login" className="font-semibold text-gold-hover hover:underline" data-testid="crew-login-link">
+                Crew sign in
+              </Link>
+              {" · "}
+              Customer?{" "}
+              <Link href="/portal/login" className="font-semibold text-gold-hover hover:underline" data-testid="customer-login-link">
+                Customer sign in
+              </Link>
+            </p>
+          </div>
         </div>
 
         <div className="flex flex-col gap-1 text-xs text-muted sm:flex-row sm:items-center sm:gap-5">
@@ -119,7 +142,6 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {/* Right: brand art */}
       <div className="relative hidden overflow-hidden bg-navy lg:block lg:w-[54%]">
         <Image
           src="/brand/login-art.jpg"
@@ -134,11 +156,18 @@ export default function LoginPage() {
             {BRAND.taglinePrimary}
           </p>
           <p className="mt-3 max-w-md text-slate-300">
-            The internal operating system for {BRAND.name} — from the first lead to
-            the final invoice.
+            The internal operating system for {BRAND.name} — from the first lead to the final invoice.
           </p>
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-cream" />}>
+      <StaffLoginInner />
+    </Suspense>
   );
 }

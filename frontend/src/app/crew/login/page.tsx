@@ -13,12 +13,14 @@ import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/brand/Logo";
 import { BRAND } from "@/lib/brand";
 
+const CREW_ROLES = new Set(["crew_lead", "mover"]);
+
 function safeNext(next: string | null): string {
-  if (!next || !next.startsWith("/portal") || next.startsWith("//")) return "/portal";
+  if (!next || !next.startsWith("/mobile") || next.startsWith("//")) return "/mobile/jobs";
   return next;
 }
 
-function CustomerLoginInner() {
+function CrewLoginInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const next = safeNext(searchParams.get("next"));
@@ -31,7 +33,7 @@ function CustomerLoginInner() {
 
   useEffect(() => {
     if (!authLoading && session && role) {
-      router.replace(role === "customer" ? next : homeForRole(role));
+      router.replace(CREW_ROLES.has(role) ? next : homeForRole(role));
     }
   }, [authLoading, session, role, next, router]);
 
@@ -41,9 +43,9 @@ function CustomerLoginInner() {
     setLoading(true);
     try {
       const { role: signedRole } = await signIn(email, password);
-      if (signedRole && signedRole !== "customer") {
+      if (signedRole && !CREW_ROLES.has(signedRole)) {
         await signOut();
-        setErr("This sign-in is for customers. Staff and crew have separate sign-in pages.");
+        setErr("This sign-in is for crew members. Use the staff or customer sign-in instead.");
         return;
       }
       toast("Signed in successfully.", "success");
@@ -57,17 +59,17 @@ function CustomerLoginInner() {
   }
 
   return (
-    <div className="flex min-h-screen bg-cream" data-testid="customer-login">
+    <div className="flex min-h-screen bg-cream" data-testid="crew-login">
       <div className="flex w-full flex-col justify-between px-6 py-8 sm:px-12 lg:w-[46%]">
         <Logo variant="dark" />
 
         <div className="mx-auto w-full max-w-sm py-8">
           <p className="mb-1 text-xs font-semibold uppercase tracking-[0.3em] text-gold-hover">
-            Customer Portal
+            Crew Portal
           </p>
-          <h1 className="font-serif text-3xl font-bold text-navy">Customer sign in</h1>
+          <h1 className="font-serif text-3xl font-bold text-navy">Crew sign in</h1>
           <p className="mt-2 text-sm text-muted">
-            View your quotes, move schedule, invoices, payments, and documents.
+            Access assigned jobs, time clock, photos, checklists, and move-day details.
           </p>
 
           <form onSubmit={onSubmit} className="mt-7 space-y-4">
@@ -76,12 +78,12 @@ function CustomerLoginInner() {
               <Input
                 id="email"
                 type="email"
-                data-testid="customer-login-email"
+                data-testid="crew-login-email"
                 autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                placeholder="you@example.com"
+                placeholder="crew@company.com"
               />
             </div>
             <div>
@@ -94,7 +96,7 @@ function CustomerLoginInner() {
               <Input
                 id="password"
                 type="password"
-                data-testid="customer-login-password"
+                data-testid="crew-login-password"
                 autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -104,28 +106,24 @@ function CustomerLoginInner() {
             </div>
 
             {err && (
-              <p data-testid="customer-login-error" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              <p data-testid="crew-login-error" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
                 {err}
               </p>
             )}
 
-            <Button type="submit" variant="navy" className="w-full" size="lg" loading={loading} data-testid="customer-login-submit">
-              Sign in to Customer Portal
+            <Button type="submit" variant="navy" className="w-full" size="lg" loading={loading} data-testid="crew-login-submit">
+              Sign in to Crew Portal
             </Button>
           </form>
 
           <div className="mt-6 space-y-2 text-center text-xs text-muted">
-            <p>Need access? Contact us and we&apos;ll help with your account.</p>
+            <p>Accounts are provisioned by your company administrator.</p>
             <p>
               Office team?{" "}
-              <Link href="/login" className="font-semibold text-gold-hover hover:underline" data-testid="staff-login-link">
-                Staff sign in
-              </Link>
+              <Link href="/login" className="font-semibold text-gold-hover hover:underline">Staff sign in</Link>
               {" · "}
-              Crew member?{" "}
-              <Link href="/crew/login" className="font-semibold text-gold-hover hover:underline" data-testid="crew-login-link">
-                Crew sign in
-              </Link>
+              Customer?{" "}
+              <Link href="/portal/login" className="font-semibold text-gold-hover hover:underline">Customer sign in</Link>
             </p>
           </div>
         </div>
@@ -150,11 +148,9 @@ function CustomerLoginInner() {
         />
         <div className="absolute inset-0 bg-gradient-to-t from-navy via-navy/40 to-transparent" />
         <div className="absolute bottom-0 left-0 p-12">
-          <p className="font-serif text-3xl font-bold leading-tight text-cream">
-            {BRAND.taglinePrimary}
-          </p>
+          <p className="font-serif text-3xl font-bold leading-tight text-cream">Southern Magnolia Crew</p>
           <p className="mt-3 max-w-md text-slate-300">
-            Your move with {BRAND.name}, at your fingertips — quotes, schedule, invoices, and documents in one place.
+            Everything your crew needs for move day — jobs, time, photos, and checklists in one place.
           </p>
         </div>
       </div>
@@ -162,10 +158,10 @@ function CustomerLoginInner() {
   );
 }
 
-export default function CustomerLoginPage() {
+export default function CrewLoginPage() {
   return (
     <Suspense fallback={<div className="min-h-screen bg-cream" />}>
-      <CustomerLoginInner />
+      <CrewLoginInner />
     </Suspense>
   );
 }
