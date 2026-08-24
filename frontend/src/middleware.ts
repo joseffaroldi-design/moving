@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
 const PROTECTED = ["/dashboard", "/portal", "/mobile"];
-const PUBLIC_UNDER_PROTECTED = ["/portal/login"];
+const PUBLIC_UNDER_PROTECTED = ["/portal/login", "/portal/activate"];
 
 const STAFF_ROLES = new Set(["owner", "operations_manager", "dispatcher", "sales"]);
 const MOBILE_ROLES = new Set(["owner", "operations_manager", "dispatcher", "crew_lead", "mover"]);
@@ -86,7 +86,7 @@ export async function middleware(request: NextRequest) {
   if (isProtected && user) {
     const { data: profile } = await supabase
       .from("profiles")
-      .select("role, is_active")
+      .select("role, is_active, company_id")
       .eq("id", user.id)
       .maybeSingle();
 
@@ -95,6 +95,16 @@ export async function middleware(request: NextRequest) {
       const url = request.nextUrl.clone();
       url.pathname = "/unauthorized";
       url.search = "";
+      return withRefreshedCookies(response, NextResponse.redirect(url));
+    }
+
+    // A newly confirmed customer has a safe customer profile but no tenant link
+    // until the activation RPC matches their verified Auth email to an existing
+    // customer record. Never let that unlinked identity into portal data routes.
+    if (path.startsWith("/portal") && role === "customer" && !profile.company_id) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/portal/activate";
+      url.search = "?complete=1";
       return withRefreshedCookies(response, NextResponse.redirect(url));
     }
 

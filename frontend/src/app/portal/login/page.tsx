@@ -8,6 +8,7 @@ import { Phone, Mail } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useToast } from "@/components/ui/toast";
 import { homeForRole } from "@/lib/nav";
+import { getBrowserClient } from "@/lib/supabase/client";
 import { Input, Label } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/brand/Logo";
@@ -24,6 +25,7 @@ function CustomerLoginInner() {
   const next = safeNext(searchParams.get("next"));
   const { signIn, signOut, session, role, loading: authLoading } = useAuth();
   const toast = useToast();
+  const supabase = getBrowserClient();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -46,6 +48,20 @@ function CustomerLoginInner() {
         setErr("This sign-in is for customers. Staff and crew have separate sign-in pages.");
         return;
       }
+
+      if (signedRole === "customer") {
+        const { error: activationError } = await supabase.rpc(
+          "portal_activate_customer_account"
+        );
+        if (activationError) {
+          await signOut();
+          setErr(
+            "We couldn't match this verified email to one customer record. If this is your first visit, confirm you're using the same email you gave our office, or contact us for help."
+          );
+          return;
+        }
+      }
+
       toast("Signed in successfully.", "success");
       router.replace(next);
       router.refresh();
@@ -115,7 +131,12 @@ function CustomerLoginInner() {
           </form>
 
           <div className="mt-6 space-y-2 text-center text-xs text-muted">
-            <p>Need access? Contact us and we&apos;ll help with your account.</p>
+            <p>
+              First time here?{" "}
+              <Link href="/portal/activate" className="font-semibold text-gold-hover hover:underline" data-testid="customer-activate-link">
+                Activate your customer account
+              </Link>
+            </p>
             <p>
               Office team?{" "}
               <Link href="/login" className="font-semibold text-gold-hover hover:underline" data-testid="staff-login-link">
