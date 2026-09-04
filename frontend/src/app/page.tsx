@@ -5,6 +5,7 @@ import { TrustBar } from "@/components/marketing/TrustBar";
 import { WhyChooseUs } from "@/components/marketing/WhyChooseUs";
 import { ServicesGrid } from "@/components/marketing/ServicesGrid";
 import { ProcessTimeline } from "@/components/marketing/ProcessTimeline";
+import { ReviewCTA } from "@/components/marketing/ReviewCTA";
 import { FAQ } from "@/components/marketing/FAQ";
 import { EstimateSection } from "@/components/marketing/EstimateSection";
 import { SiteFooter } from "@/components/marketing/SiteFooter";
@@ -63,6 +64,7 @@ export default function HomePage() {
         <WhyChooseUs />
         <ServicesGrid />
         <ProcessTimeline />
+        <ReviewCTA />
         <FAQ />
         <EstimateSection />
       </main>

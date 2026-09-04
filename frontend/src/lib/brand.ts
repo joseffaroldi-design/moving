@@ -14,6 +14,9 @@ export const BRAND = {
   addressCountry: "US",
   serviceAreaLabel: "Serving Greater New Orleans & Southeast Louisiana",
   hoursText: "Mon – Sat: 8:00 AM – 6:00 PM",
+  // Paste your Google review deep-link here (search.google.com/local/writereview
+  // ?placeid=...). Empty = a Google Maps search for the business is used instead.
+  googleReviewUrl: "",
   hours: [
     {
       days: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],

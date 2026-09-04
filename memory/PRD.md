@@ -791,3 +791,15 @@ NEXT_PUBLIC_SITE_URL=https://southernmagnoliamovers.com in the DEPLOYMENT env va
 match the live site to the Business Profile.
 OWNER TODO to finish local SEO: paste real social/directory URLs (BRAND.socials),
 confirm/adjust hours, optionally switch to a domain email.
+
+## SEO follow-ups — 2026-06 (part 2)
+1. Canonical domain: preview NEXT_PUBLIC_SITE_URL -> https://southernmagnoliamovers.com;
+   rebuilt. Schema url/@id + canonical/OG now use the live domain (verified in HTML).
+   PRODUCTION still needs the same value set in DEPLOY env vars + redeploy.
+2. Search Console: layout metadata emits <meta google-site-verification> when
+   NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION is set (omitted otherwise). Owner sets token
+   (HTML-tag method) or uses DNS domain property.
+3. Review Booster: new ReviewCTA section (src/components/marketing/ReviewCTA.tsx)
+   between ProcessTimeline and FAQ — 5 gold stars + "Leave a Google Review" button.
+   Links to BRAND.googleReviewUrl if set, else a Google Maps search for the business
+   (working fallback verified). No fake aggregateRating (Google-policy safe).
