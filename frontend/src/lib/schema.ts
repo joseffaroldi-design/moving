@@ -21,6 +21,10 @@ const AREAS = [
 
 const areaServed = AREAS.map((a) => ({ "@type": "City", name: `${a}, LA` }));
 
+const sameAs: string[] = Object.values(BRAND.socials).filter(
+  (u) => typeof u === "string" && u.length > 0
+);
+
 export function movingCompanySchema() {
   return {
     "@context": "https://schema.org",
@@ -34,6 +38,19 @@ export function movingCompanySchema() {
     logo: `${SITE_URL}/brand/logo-official.jpg`,
     description:
       "Professional residential and commercial moving throughout New Orleans and Southeast Louisiana.",
+    address: {
+      "@type": "PostalAddress",
+      addressLocality: BRAND.addressLocality,
+      addressRegion: BRAND.addressRegion,
+      addressCountry: BRAND.addressCountry,
+    },
+    openingHoursSpecification: BRAND.hours.map((h) => ({
+      "@type": "OpeningHoursSpecification",
+      dayOfWeek: h.days,
+      opens: h.opens,
+      closes: h.closes,
+    })),
+    ...(sameAs.length ? { sameAs } : {}),
     areaServed,
     priceRange: "$$",
     slogan: BRAND.taglinePrimary,

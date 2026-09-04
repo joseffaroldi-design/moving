@@ -775,3 +775,19 @@ OWNER SETUP REQUIRED (one-time):
      https://southernmagnoliamovers.com/auth/callback  (+ preview origin /auth/callback)
      Site URL: https://southernmagnoliamovers.com
 Then redeploy for production.
+
+## Local SEO / Google Business metadata — 2026-06
+Enhanced MovingCompany JSON-LD (src/lib/schema.ts): added PostalAddress
+(locality New Orleans / region LA / country US — NO street, owner hides address
+on GBP), openingHoursSpecification (default Mon–Sat 08:00–18:00), and conditional
+sameAs (emitted only when BRAND.socials populated). Added structured NAP fields to
+src/lib/brand.ts (addressLocality/Region/Country, serviceAreaLabel, hoursText,
+hours[], socials{}). Added visible Hours line to SiteFooter (data-testid footer-hours).
+Verified in homepage HTML; build passes.
+⚠️ CRITICAL DOMAIN ISSUE: NEXT_PUBLIC_SITE_URL is still magnolia-crew.emergent.host,
+so canonical/OG/schema URLs point to the WRONG domain. MUST set
+NEXT_PUBLIC_SITE_URL=https://southernmagnoliamovers.com in the DEPLOYMENT env vars
+(and optionally preview .env) then redeploy — otherwise the schema can't help Google
+match the live site to the Business Profile.
+OWNER TODO to finish local SEO: paste real social/directory URLs (BRAND.socials),
+confirm/adjust hours, optionally switch to a domain email.
