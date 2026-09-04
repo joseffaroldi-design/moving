@@ -35,6 +35,11 @@ export const metadata: Metadata = {
     icon: "/brand/favicon.png",
     apple: "/brand/favicon.png",
   },
+  // Set NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION to your Search Console HTML-tag token
+  // to emit the <meta name="google-site-verification"> tag (omitted when unset).
+  verification: {
+    google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION,
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

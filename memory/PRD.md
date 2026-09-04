@@ -755,3 +755,51 @@ VERDICT: Ready for Owner Use = YES. Ready for Production = YES (deployed & accep
 Reminder: delete throwaway "Test Buyer" lead/customer/quote/job/invoice from production.
 Deferred/optional: automated customer emails, Business Profile logo/terms/brand-color fields,
 real-device responsive pass. Phase 10 not started.
+
+## Google Sign-in (Customer Portal) — 2026-06
+Implemented via **Supabase native Google OAuth** (NOT Emergent-managed auth).
+Rationale: portal/dashboard/mobile are 100% Supabase-auth + RLS; Emergent-managed
+auth yields a separate session that middleware rejects (no Supabase session), and
+there is no service-role key to bridge it. Supabase Google OAuth creates a real
+auth.users user that flows through existing middleware, roles, RLS, and reuses the
+existing portal_activate_customer_account self-activation RPC.
+Code: frontend/src/app/auth/callback/route.ts (PKCE code exchange + activation RPC),
+AuthProvider.signInWithGoogle(), "Continue with Google" button on /portal/login.
+STATUS: code complete + builds; button renders; OAuth initiates. NOT end-to-end
+testable by agent because the Google provider is owner-configured only.
+OWNER SETUP REQUIRED (one-time):
+  1. Google Cloud Console: create OAuth 2.0 Client (Web). Authorized redirect URI:
+     https://yrvgovkkukmtdmgejtxc.supabase.co/auth/v1/callback
+  2. Supabase → Authentication → Providers → Google: enable, paste Client ID+Secret.
+  3. Supabase → Authentication → URL Configuration → Redirect URLs allowlist:
+     https://southernmagnoliamovers.com/auth/callback  (+ preview origin /auth/callback)
+     Site URL: https://southernmagnoliamovers.com
+Then redeploy for production.
+
+## Local SEO / Google Business metadata — 2026-06
+Enhanced MovingCompany JSON-LD (src/lib/schema.ts): added PostalAddress
+(locality New Orleans / region LA / country US — NO street, owner hides address
+on GBP), openingHoursSpecification (default Mon–Sat 08:00–18:00), and conditional
+sameAs (emitted only when BRAND.socials populated). Added structured NAP fields to
+src/lib/brand.ts (addressLocality/Region/Country, serviceAreaLabel, hoursText,
+hours[], socials{}). Added visible Hours line to SiteFooter (data-testid footer-hours).
+Verified in homepage HTML; build passes.
+⚠️ CRITICAL DOMAIN ISSUE: NEXT_PUBLIC_SITE_URL is still magnolia-crew.emergent.host,
+so canonical/OG/schema URLs point to the WRONG domain. MUST set
+NEXT_PUBLIC_SITE_URL=https://southernmagnoliamovers.com in the DEPLOYMENT env vars
+(and optionally preview .env) then redeploy — otherwise the schema can't help Google
+match the live site to the Business Profile.
+OWNER TODO to finish local SEO: paste real social/directory URLs (BRAND.socials),
+confirm/adjust hours, optionally switch to a domain email.
+
+## SEO follow-ups — 2026-06 (part 2)
+1. Canonical domain: preview NEXT_PUBLIC_SITE_URL -> https://southernmagnoliamovers.com;
+   rebuilt. Schema url/@id + canonical/OG now use the live domain (verified in HTML).
+   PRODUCTION still needs the same value set in DEPLOY env vars + redeploy.
+2. Search Console: layout metadata emits <meta google-site-verification> when
+   NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION is set (omitted otherwise). Owner sets token
+   (HTML-tag method) or uses DNS domain property.
+3. Review Booster: new ReviewCTA section (src/components/marketing/ReviewCTA.tsx)
+   between ProcessTimeline and FAQ — 5 gold stars + "Leave a Google Review" button.
+   Links to BRAND.googleReviewUrl if set, else a Google Maps search for the business
+   (working fallback verified). No fake aggregateRating (Google-policy safe).

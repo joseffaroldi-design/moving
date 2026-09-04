@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Phone, Mail, MapPin } from "lucide-react";
+import { Phone, Mail, MapPin, Clock } from "lucide-react";
 import { BRAND } from "@/lib/brand";
 import { BrandLogo } from "./BrandLogo";
 
@@ -84,8 +84,11 @@ export function SiteFooter() {
                   <Mail className="h-4 w-4 text-gold" strokeWidth={1.5} /> {BRAND.email}
                 </a>
               </li>
-              <li className="inline-flex items-center gap-2">
+              <li className="inline-flex items-center gap-2" data-testid="footer-address">
                 <MapPin className="h-4 w-4 text-gold" strokeWidth={1.5} /> New Orleans, Louisiana
+              </li>
+              <li className="inline-flex items-center gap-2" data-testid="footer-hours">
+                <Clock className="h-4 w-4 text-gold" strokeWidth={1.5} /> {BRAND.hoursText}
               </li>
             </ul>
           </div>
