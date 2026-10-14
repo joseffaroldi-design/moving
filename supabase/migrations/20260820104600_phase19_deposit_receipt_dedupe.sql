@@ -1,0 +1,66 @@
+-- A paid deposit already queues the dedicated deposit_received email.
+-- When that deposit is also credited onto an invoice, do not queue a second
+-- generic payment_receipt for the same money.
+create or replace function public._queue_v1_customer_email()
+returns trigger
+language plpgsql
+security definer
+set search_path to 'public'
+as $$
+declare
+  n jsonb := to_jsonb(new);
+  o jsonb := case when tg_op='UPDATE' then to_jsonb(old) else '{}'::jsonb end;
+  v_company uuid; v_customer uuid; v_event text; v_key text;
+  v_meta jsonb := '{}'::jsonb; v_related text; v_related_id uuid;
+  v_lead uuid; v_quote uuid; v_job uuid;
+begin
+  if tg_table_name='leads' and tg_op='INSERT' then
+    v_event:='estimate_received'; v_company:=(n->>'company_id')::uuid;
+    v_customer:=(n->>'customer_id')::uuid; v_lead:=(n->>'id')::uuid;
+    v_related:='lead'; v_related_id:=(n->>'id')::uuid; v_key:='estimate_received:'||(n->>'id');
+  elsif tg_table_name='quotes' and n->>'status'='sent' and (tg_op='INSERT' or o->>'status' is distinct from n->>'status') then
+    v_event:='quote_ready'; v_company:=(n->>'company_id')::uuid; v_customer:=(n->>'customer_id')::uuid;
+    v_lead:=nullif(n->>'lead_id','')::uuid; v_quote:=(n->>'id')::uuid;
+    v_related:='quote'; v_related_id:=v_quote; v_key:='quote_ready:'||(n->>'id');
+  elsif tg_table_name='quotes' and n->>'status'='accepted' and (tg_op='INSERT' or o->>'status' is distinct from n->>'status') then
+    v_event:='booking_confirmed'; v_company:=(n->>'company_id')::uuid; v_customer:=(n->>'customer_id')::uuid;
+    v_lead:=nullif(n->>'lead_id','')::uuid; v_quote:=(n->>'id')::uuid;
+    v_related:='quote'; v_related_id:=v_quote; v_key:='booking_confirmed:'||(n->>'id');
+  elsif tg_table_name='customer_deposits' and n->>'paid_at' is not null and (tg_op='INSERT' or o->>'paid_at' is null) then
+    v_event:='deposit_received'; v_company:=(n->>'company_id')::uuid;
+    v_customer:=nullif(n->>'customer_id','')::uuid; v_quote:=nullif(n->>'quote_id','')::uuid;
+    v_job:=nullif(n->>'job_id','')::uuid; v_related:='deposit'; v_related_id:=(n->>'id')::uuid;
+    v_key:='deposit_received:'||(n->>'id'); v_meta:=jsonb_build_object('amount',n->>'amount');
+  elsif tg_table_name='invoices' and n->>'status'='sent' and (tg_op='INSERT' or o->>'status' is distinct from n->>'status') then
+    v_event:='invoice_ready'; v_company:=(n->>'company_id')::uuid;
+    v_customer:=nullif(n->>'customer_id','')::uuid; v_quote:=nullif(n->>'quote_id','')::uuid;
+    v_job:=nullif(n->>'job_id','')::uuid; v_related:='invoice'; v_related_id:=(n->>'id')::uuid;
+    v_key:='invoice_ready:'||(n->>'id'); v_meta:=jsonb_build_object('amount',n->>'balance','invoice_number',n->>'invoice_number');
+  elsif tg_table_name='invoice_payments' and tg_op='INSERT' and coalesce(n->>'method','') <> 'deposit' then
+    select i.customer_id,i.quote_id,i.job_id into v_customer,v_quote,v_job
+      from public.invoices i where i.id=(n->>'invoice_id')::uuid;
+    v_event:='payment_receipt'; v_company:=(n->>'company_id')::uuid;
+    v_related:='payment'; v_related_id:=(n->>'id')::uuid;
+    v_key:='payment_receipt:'||(n->>'id'); v_meta:=jsonb_build_object('amount',n->>'amount');
+  elsif tg_table_name='jobs' and n->>'status'='completed' and (tg_op='INSERT' or o->>'status' is distinct from n->>'status') then
+    v_event:='review_request'; v_company:=(n->>'company_id')::uuid;
+    v_customer:=nullif(n->>'customer_id','')::uuid; v_quote:=nullif(n->>'quote_id','')::uuid;
+    v_job:=(n->>'id')::uuid; v_related:='job'; v_related_id:=v_job; v_key:='review_request:'||(n->>'id');
+  else
+    return new;
+  end if;
+
+  if v_customer is null then return new; end if;
+
+  insert into public.communications(
+    company_id,customer_id,lead_id,quote_id,job_id,channel,direction,provider,status,
+    event_type,idempotency_key,related_object_type,related_object_id,metadata
+  ) values (
+    v_company,v_customer,v_lead,v_quote,v_job,
+    'email'::communication_channel,'outbound'::communication_direction,'resend','queued',
+    v_event,v_key,v_related,v_related_id,v_meta
+  ) on conflict do nothing;
+
+  return new;
+end;
+$$;

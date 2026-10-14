@@ -1,0 +1,44 @@
+name: Payments CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "supabase/functions/create-payment-checkout/**"
+      - "supabase/functions/stripe-webhook/**"
+      - "supabase/migrations/**phase19_*.sql"
+      - "frontend/src/lib/payments.ts"
+      - "frontend/src/app/portal/quotes/page.tsx"
+      - "frontend/src/app/portal/payments/page.tsx"
+      - ".github/workflows/payments-ci.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "supabase/functions/create-payment-checkout/**"
+      - "supabase/functions/stripe-webhook/**"
+      - "supabase/migrations/**phase19_*.sql"
+      - "frontend/src/lib/payments.ts"
+      - "frontend/src/app/portal/quotes/page.tsx"
+      - "frontend/src/app/portal/payments/page.tsx"
+      - ".github/workflows/payments-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  edge-functions:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Type-check payment Edge Functions
+        run: >-
+          deno check
+          supabase/functions/create-payment-checkout/index.ts
+          supabase/functions/stripe-webhook/index.ts
