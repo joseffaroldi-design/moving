@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import nodemailer from "npm:nodemailer@9.0.0";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -6,6 +7,7 @@ const cors = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 const STAFF = new Set(["owner", "operations_manager", "dispatcher", "sales"]);
+const GMAIL_FROM = "smagnoliamoving@gmail.com";
 const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { ...cors, "Content-Type": "application/json", "Cache-Control": "no-store" } });
 const money = (v: unknown) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(Number(v || 0));
 const render = (s: string, v: Record<string, string>) => s.replace(/{{\s*([a-z_]+)\s*}}/g, (_, k) => v[k] ?? "");
@@ -24,6 +26,8 @@ Deno.serve(async (req: Request) => {
   try { b = await req.json(); } catch {}
 
   const processQueue = b.mode === "process_queue";
+  const emailProvider = (Deno.env.get("CUSTOMER_EMAIL_PROVIDER") ?? "resend").toLowerCase();
+  if (emailProvider !== "resend" && emailProvider !== "gmail") return json({ error: "Unsupported email provider" }, 500);
   const auth = req.headers.get("Authorization") ?? "";
   const isService = auth === `Bearer ${service}`;
   let cronAuthorized = false;
@@ -67,7 +71,7 @@ Deno.serve(async (req: Request) => {
       if (!j.customer_id) continue;
       await admin.from("communications").insert({
         company_id: j.company_id, customer_id: j.customer_id, quote_id: j.quote_id, job_id: j.id,
-        channel: "email", direction: "outbound", provider: "resend", status: "queued", event_type: "move_reminder",
+        channel: "email", direction: "outbound", provider: emailProvider, status: "queued", event_type: "move_reminder",
         idempotency_key: `move_reminder:${j.id}:${String(j.scheduled_start).slice(0, 10)}`,
         related_object_type: "job", related_object_id: j.id, metadata: { move_date: j.scheduled_start },
       });
@@ -84,7 +88,7 @@ Deno.serve(async (req: Request) => {
     for (const qf of quoteFollowUps ?? []) {
       await admin.from("communications").insert({
         company_id: qf.company_id, customer_id: qf.customer_id, lead_id: qf.lead_id, quote_id: qf.id,
-        channel: "email", direction: "outbound", provider: "resend", status: "queued", event_type: "quote_follow_up",
+        channel: "email", direction: "outbound", provider: emailProvider, status: "queued", event_type: "quote_follow_up",
         idempotency_key: `quote_follow_up_24h:${qf.id}`,
         related_object_type: "quote", related_object_id: qf.id, metadata: {},
       });
@@ -113,7 +117,7 @@ Deno.serve(async (req: Request) => {
       if (paidQuoteIds.has(dq.id)) continue;
       await admin.from("communications").insert({
         company_id: dq.company_id, customer_id: dq.customer_id, lead_id: dq.lead_id, quote_id: dq.id,
-        channel: "email", direction: "outbound", provider: "resend", status: "queued", event_type: "deposit_request",
+        channel: "email", direction: "outbound", provider: emailProvider, status: "queued", event_type: "deposit_request",
         idempotency_key: `deposit_request_24h:${dq.id}`,
         related_object_type: "quote", related_object_id: dq.id, metadata: { amount: dq.deposit_amount },
       });
@@ -126,8 +130,17 @@ Deno.serve(async (req: Request) => {
   if (qerr) return json({ error: "Queue query failed" }, 500);
 
   const apiKey = Deno.env.get("RESEND_API_KEY"), configuredFrom = Deno.env.get("CUSTOMER_EMAIL_FROM");
-  let sent = 0, failed = 0;
+  const gmailAppPassword = Deno.env.get("GMAIL_APP_PASSWORD");
+  let sent = 0, failed = 0, claimedCount = 0;
   for (const row of rows ?? []) {
+    // Claim each queued message once. SMTP has no idempotency key; a concurrent
+    // cron run or staff retry must not send the same row a second time.
+    const { data: claimed, error: claimError } = await admin.from("communications")
+      .update({ status: "processing", provider: emailProvider, last_attempt_at: new Date().toISOString() })
+      .eq("id", row.id).eq("status", "queued").select("id").maybeSingle();
+    if (claimError) return json({ error: "Queue claim failed", sent, failed }, 500);
+    if (!claimed) continue;
+    claimedCount++;
     const { data: c } = await admin.from("customers").select("first_name,email").eq("id", row.customer_id).single();
     const { data: bp } = await admin.from("business_profile").select("business_name,email,website").eq("company_id", row.company_id).maybeSingle();
     const { data: t } = await admin.from("message_templates").select("id,subject,body").eq("company_id", row.company_id).eq("channel", "email").eq("name", row.event_type).eq("is_active", true).maybeSingle();
@@ -143,22 +156,43 @@ Deno.serve(async (req: Request) => {
     }
     const portal = bp?.website ? `${String(bp.website).replace(/\/$/, "")}/portal` : "";
     const vars = { first_name: c.first_name ?? "there", move_date: String(meta.move_date ?? "").slice(0, 10), amount: money(meta.amount), invoice_number: String(meta.invoice_number ?? ""), action_url: String(meta.action_url ?? portal) };
-    const subject = render(t.subject ?? "Southern Magnolia Moving update", vars), body = render(t.body, vars), from = configuredFrom || bp?.email;
-    if (!apiKey || !from) {
-      await admin.from("communications").update({ status: "failed", subject, body, to_address: c.email, from_address: from ?? null, template_id: t.id, error_message: "Email provider configuration missing", last_attempt_at: new Date().toISOString() }).eq("id", row.id);
+    const subject = render(t.subject ?? "Southern Magnolia Moving update", vars), body = render(t.body, vars), from = emailProvider === "gmail" ? GMAIL_FROM : (configuredFrom || bp?.email);
+    if ((emailProvider === "gmail" && !gmailAppPassword) || (emailProvider === "resend" && (!apiKey || !from))) {
+      await admin.from("communications").update({ status: "failed", provider: emailProvider, subject, body, to_address: c.email, from_address: from ?? null, template_id: t.id, error_message: emailProvider === "gmail" ? "Gmail app password missing" : "Email provider configuration missing", last_attempt_at: new Date().toISOString() }).eq("id", row.id);
       failed++;
       continue;
     }
     try {
-      const r = await fetch("https://api.resend.com/emails", { method: "POST", headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", "Idempotency-Key": row.idempotency_key }, body: JSON.stringify({ from, to: [c.email], subject, text: body }) });
-      const out = await r.json();
-      if (!r.ok) throw new Error(out?.message || `Provider HTTP ${r.status}`);
-      await admin.from("communications").update({ status: "sent", subject, body, to_address: c.email, from_address: from, template_id: t.id, provider_message_id: out.id ?? null, sent_at: new Date().toISOString(), last_attempt_at: new Date().toISOString(), error_message: null }).eq("id", row.id);
+      let providerMessageId: string | null = null;
+      if (emailProvider === "gmail") {
+        // Gmail app passwords require 2-Step Verification. Port 465 uses implicit TLS;
+        // hosted Edge Functions block outgoing SMTP ports 25 and 587.
+        const transport = nodemailer.createTransport({
+          host: "smtp.gmail.com", port: 465, secure: true,
+          auth: { user: GMAIL_FROM, pass: gmailAppPassword! },
+          connectionTimeout: 10000, greetingTimeout: 10000, socketTimeout: 20000,
+        });
+        try {
+          const info = await transport.sendMail({
+            from: `Southern Magnolia Movers <${GMAIL_FROM}>`,
+            to: c.email, subject, text: body,
+          });
+          providerMessageId = info.messageId ?? null;
+        } finally {
+          transport.close();
+        }
+      } else {
+        const r = await fetch("https://api.resend.com/emails", { method: "POST", headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", "Idempotency-Key": row.idempotency_key }, body: JSON.stringify({ from, to: [c.email], subject, text: body }) });
+        const out = await r.json();
+        if (!r.ok) throw new Error(out?.message || `Provider HTTP ${r.status}`);
+        providerMessageId = out.id ?? null;
+      }
+      await admin.from("communications").update({ status: "sent", provider: emailProvider, subject, body, to_address: c.email, from_address: from, template_id: t.id, provider_message_id: providerMessageId, sent_at: new Date().toISOString(), last_attempt_at: new Date().toISOString(), error_message: null }).eq("id", row.id);
       sent++;
     } catch (e) {
-      await admin.from("communications").update({ status: "failed", subject, body, to_address: c.email, from_address: from, template_id: t.id, error_message: e instanceof Error ? e.message : "Email delivery failed", last_attempt_at: new Date().toISOString(), retry_count: Number(row.retry_count || 0) + 1 }).eq("id", row.id);
+      await admin.from("communications").update({ status: "failed", provider: emailProvider, subject, body, to_address: c.email, from_address: from, template_id: t.id, error_message: e instanceof Error ? e.message : "Email delivery failed", last_attempt_at: new Date().toISOString(), retry_count: Number(row.retry_count || 0) + 1 }).eq("id", row.id);
       failed++;
     }
   }
-  return json({ ok: true, processed: (rows ?? []).length, sent, failed });
+  return json({ ok: true, processed: claimedCount, sent, failed });
 });
