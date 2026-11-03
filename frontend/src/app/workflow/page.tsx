@@ -56,9 +56,9 @@ function Arrow() {
 const STEPS = [
   { n: 1, who: "Customer · Staff", title: "Lead Captured", body: "A request comes in through the website estimate form or is entered by staff — with contact info, move details, and needs." },
   { n: 2, who: "Sales · Customer", title: "Quote Sent & Approved", body: "Staff build an itemized quote and send it. The customer reviews and approves it online." },
-  { n: 3, who: "Dispatch", title: "Job Scheduled", body: "The approved quote becomes a job on the calendar with a date, crew, and trucks assigned." },
+  { n: 3, who: "Dispatch", title: "Job Scheduled", body: "Staff convert an accepted quote into a scheduled job, then assign the available truck and crew." },
   { n: 4, who: "Crew", title: "Move Day", body: "The crew sees their assigned job on mobile and carries out the move from start to finish." },
-  { n: 5, who: "Billing · Customer", title: "Invoice & Payment", body: "When the job is complete, an invoice is sent and the customer pays — closing out the move." },
+  { n: 5, who: "Billing · Customer", title: "Invoice & Payment", body: "Staff review and send the invoice. The customer sees the balance and contacts the office to arrange payment." },
 ];
 
 export default function WorkflowPage() {
@@ -95,7 +95,7 @@ export default function WorkflowPage() {
             <ul>
               <li>Review and approve their quote</li>
               <li>Track their scheduled move</li>
-              <li>View invoices and make payment</li>
+              <li>View invoices and arrange payment with the office</li>
             </ul>
           </div>
           <div className="wf-side-card">
