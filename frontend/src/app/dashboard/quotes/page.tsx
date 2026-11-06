@@ -312,6 +312,7 @@ const emptyLine = (): BuilderLine => ({
 const EMPTY_BUILDER = {
   hourly_rate: "",
   estimated_hours: "",
+  crew_size: "1",
   travel_fee: "",
   packing_fee: "",
   materials_fee: "",
@@ -364,6 +365,7 @@ function QuoteBuilderDrawer({
       setForm({
         hourly_rate: editQuote.hourly_rate?.toString() ?? "",
         estimated_hours: editQuote.estimated_hours?.toString() ?? "",
+        crew_size: editQuote.crew_size?.toString() ?? "1",
         travel_fee: editQuote.travel_fee?.toString() ?? "",
         packing_fee: editQuote.packing_fee?.toString() ?? "",
         materials_fee: editQuote.materials_fee?.toString() ?? "",
@@ -413,6 +415,7 @@ function QuoteBuilderDrawer({
       computeQuoteTotalsPreview({
         hourly_rate: toNum(form.hourly_rate),
         estimated_hours: toNum(form.estimated_hours),
+        crew_size: toNum(form.crew_size),
         travel_fee: toNum(form.travel_fee),
         packing_fee: toNum(form.packing_fee),
         materials_fee: toNum(form.materials_fee),
@@ -432,6 +435,8 @@ function QuoteBuilderDrawer({
       if (sourceType === "customer" && !customerId) return "Select a customer.";
       if (sourceType === "lead" && !leadId) return "Select a lead.";
     }
+    if (!Number.isInteger(Number(form.crew_size)) || Number(form.crew_size) < 1 || Number(form.crew_size) > 20)
+      return "Crew size must be between 1 and 20.";
     if (toNum(form.tax_rate) < 0 || toNum(form.tax_rate) > 100)
       return "Tax rate must be between 0 and 100.";
     if (toNum(form.deposit_percent) < 0 || toNum(form.deposit_percent) > 100)
@@ -470,6 +475,7 @@ function QuoteBuilderDrawer({
     const scalar = {
       hourly_rate: form.hourly_rate ? toNum(form.hourly_rate) : null,
       estimated_hours: form.estimated_hours ? toNum(form.estimated_hours) : null,
+      crew_size: Number(form.crew_size),
       travel_fee: toNum(form.travel_fee),
       packing_fee: toNum(form.packing_fee),
       materials_fee: toNum(form.materials_fee),
@@ -625,11 +631,12 @@ function QuoteBuilderDrawer({
             Labor
           </h4>
           <div className="grid grid-cols-2 gap-3">
-            {numField("Hourly rate", "hourly_rate", { prefix: "$" })}
+            {numField("Hourly rate per worker", "hourly_rate", { prefix: "$" })}
             {numField("Estimated hours", "estimated_hours", { step: "0.5" })}
+            {numField("Crew members", "crew_size", { step: "1" })}
           </div>
           <p className="mt-1 text-[11px] text-slate-400">
-            Labor is billed as rate × hours. Do not also add a labor line item (avoids
+            Labor is billed as rate per worker × hours × crew members. Do not also add a labor line item (avoids
             double-counting).
           </p>
         </div>
@@ -721,7 +728,7 @@ function QuoteBuilderDrawer({
           <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gold-hover">
             Live Preview
           </h4>
-          <PreviewRow label="Labor" value={preview.laborAmount} />
+          <PreviewRow label={`Labor (${form.crew_size || "0"} workers × ${form.estimated_hours || "0"} hrs)`} value={preview.laborAmount} />
           <PreviewRow label="Line items" value={preview.lineItemAmount} />
           <PreviewRow label="Subtotal" value={preview.grossSubtotal} strong />
           {preview.discount > 0 && <PreviewRow label="Discount" value={-preview.discount} />}
@@ -1037,7 +1044,9 @@ function QuoteDetailDrawer({
               Pricing
             </h4>
             <div className="rounded-md border border-slate-200">
-              <PricingLine label="Hourly rate" value={formatCurrency(quote.hourly_rate)} />
+              <PricingLine label={quote.crew_size ? "Hourly rate per worker" : "Hourly rate"} value={formatCurrency(quote.hourly_rate)} />
+              {quote.crew_size != null && <PricingLine label="Crew members" value={String(quote.crew_size)} />}
+              {quote.crew_size != null && <PricingLine label="Labor" value={formatCurrency((quote.hourly_rate ?? 0) * (quote.estimated_hours ?? 0) * quote.crew_size)} />}
               <PricingLine label="Estimated hours" value={String(quote.estimated_hours ?? "—")} />
               <PricingLine label="Travel fee" value={formatCurrency(quote.travel_fee)} />
               <PricingLine label="Packing fee" value={formatCurrency(quote.packing_fee)} />
