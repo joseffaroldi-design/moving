@@ -27,11 +27,11 @@ Open the accepted quote → **Convert** → fill schedule (start/end), pickup + 
 ## 8. Schedule the move
 The start/end you set on convert is the schedule. Adjust in **Jobs** (open the job).
 
-## 9. Assign dispatch resources
-**Dispatch** → assign the job to a day/truck/crew as needed.
+## 9. Assign dispatch resources (optional)
+**Dispatch** → assign a day/truck/crew when useful. A small team can manage the job from **Jobs** without crew mobile tracking.
 
 ## 10. Update job status
-Open the job → use the status control to move it forward (Scheduled → Confirmed → In Progress → Completed). You cannot skip backward.
+Open the job → use the staff status control to move it forward (Scheduled → Confirmed → In Progress → Completed). You cannot skip backward. Staff completion does not require crew clock entries, checklists, photos, or a crew completion acknowledgment. Record any customer paperwork your business needs separately. The crew mobile workflow remains available if you choose to use it later.
 
 ## 11. Generate an invoice
 Open the job → **Generate invoice**. This creates a **Draft** invoice from the job.
