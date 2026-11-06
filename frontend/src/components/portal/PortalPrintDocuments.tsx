@@ -80,7 +80,7 @@ export function PortalQuotePrint({ quote }: { quote: PortalQuoteDetail }) {
                   i > 0 ? "border-t border-slate-100" : ""
                 }`}
               >
-                <span className="text-slate-600">{m.label}</span>
+                <span className="text-slate-600">{m.key === "hourly_rate" && quote.crew_size == null ? "Hourly rate" : m.label}</span>
                 <span className="font-medium text-navy">
                   {m.money
                     ? formatCurrency(quote[m.key] as number)
