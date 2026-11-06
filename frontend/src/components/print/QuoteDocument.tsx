@@ -81,7 +81,7 @@ export function QuoteDocument({ quote }: { quote: Quote }) {
         <div className="rounded-md border border-slate-200">
           {MONEY.filter((m) => quote[m.key] !== undefined && quote[m.key] !== null).map((m, i) => (
             <div key={m.key as string} className={`flex justify-between px-3 py-2 text-[13px] ${i > 0 ? "border-t border-slate-100" : ""}`}>
-              <span className="text-slate-600">{m.label}</span>
+              <span className="text-slate-600">{m.key === "hourly_rate" && quote.crew_size == null ? "Hourly rate" : m.label}</span>
               <span className="font-medium text-navy">
                 {m.key === "estimated_hours" || m.key === "crew_size" ? String(quote[m.key]) : formatCurrency(quote[m.key] as number)}
               </span>
