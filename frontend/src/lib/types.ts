@@ -56,6 +56,7 @@ export interface Quote {
   discount?: number | string;
   hourly_rate?: number | string;
   estimated_hours?: number | string;
+  crew_size?: number;
   travel_fee?: number | string;
   packing_fee?: number | string;
   materials_fee?: number | string;
