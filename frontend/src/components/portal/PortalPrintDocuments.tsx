@@ -39,7 +39,8 @@ function BrandHeader() {
 }
 
 const QUOTE_MONEY: { key: keyof PortalQuoteDetail; label: string; money?: boolean }[] = [
-  { key: "hourly_rate", label: "Hourly rate", money: true },
+  { key: "hourly_rate", label: "Hourly rate per worker", money: true },
+  { key: "crew_size", label: "Crew members" },
   { key: "estimated_hours", label: "Estimated hours" },
   { key: "travel_fee", label: "Travel fee", money: true },
   { key: "packing_fee", label: "Packing fee", money: true },
