@@ -81,6 +81,7 @@ export interface QuoteRecord {
   quote_number: string;
   hourly_rate: number | null;
   estimated_hours: number | null;
+  crew_size: number | null;
   travel_fee: number | null;
   packing_fee: number | null;
   materials_fee: number | null;
@@ -133,6 +134,7 @@ export async function fetchQuoteLineItems(quoteId: string): Promise<QuoteLineIte
 export interface PricingInputs {
   hourly_rate?: number | null;
   estimated_hours?: number | null;
+  crew_size?: number | null;
   travel_fee?: number | null;
   packing_fee?: number | null;
   materials_fee?: number | null;
@@ -159,7 +161,7 @@ function r2(n: number): number {
 const nz = (v: number | null | undefined) => (typeof v === "number" && !Number.isNaN(v) ? v : 0);
 
 export function computeQuoteTotalsPreview(i: PricingInputs): PricingResult {
-  const labor = r2(nz(i.hourly_rate) * nz(i.estimated_hours));
+  const labor = r2(nz(i.hourly_rate) * nz(i.estimated_hours) * (i.crew_size ?? 1));
   const items = r2(
     i.line_items.reduce((s, li) => s + nz(li.quantity) * nz(li.unit_price), 0)
   );
@@ -217,11 +219,12 @@ export async function createQuoteWithItems(
   input: CreateQuoteInput
 ): Promise<{ quote_id: string; quote_number: string }> {
   const supabase = getBrowserClient();
-  const { data, error } = await supabase.rpc("create_quote_with_items", {
+  const { data, error } = await supabase.rpc("create_quote_with_crew", {
     p_lead_id: input.lead_id ?? null,
     p_customer_id: input.customer_id ?? null,
     p_hourly_rate: input.hourly_rate ?? null,
     p_estimated_hours: input.estimated_hours ?? null,
+    p_crew_size: input.crew_size ?? 1,
     p_travel_fee: input.travel_fee ?? 0,
     p_packing_fee: input.packing_fee ?? 0,
     p_materials_fee: input.materials_fee ?? 0,
@@ -240,10 +243,11 @@ export async function updateDraftQuoteWithItems(
   input: QuoteScalarInput
 ): Promise<{ quote_id: string }> {
   const supabase = getBrowserClient();
-  const { data, error } = await supabase.rpc("update_draft_quote_with_items", {
+  const { data, error } = await supabase.rpc("update_draft_quote_with_crew", {
     p_quote_id: quoteId,
     p_hourly_rate: input.hourly_rate ?? null,
     p_estimated_hours: input.estimated_hours ?? null,
+    p_crew_size: input.crew_size ?? 1,
     p_travel_fee: input.travel_fee ?? 0,
     p_packing_fee: input.packing_fee ?? 0,
     p_materials_fee: input.materials_fee ?? 0,
@@ -304,6 +308,7 @@ export interface PublicQuoteLineItem {
 }
 
 export interface PublicQuote {
+  crew_size: number | null;
   id: string;
   quote_number: string;
   status: string;
