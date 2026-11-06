@@ -77,6 +77,7 @@ export interface PortalQuoteDetail {
   accepted_at: string | null;
   hourly_rate: number | null;
   estimated_hours: number | null;
+  crew_size: number | null;
   travel_fee: number | null;
   packing_fee: number | null;
   materials_fee: number | null;
