@@ -119,8 +119,8 @@ export default function QuoteApprovalPage() {
               <div className="rounded-md border border-slate-200">
                 {(quote.hourly_rate || quote.estimated_hours) && (
                   <Row
-                    label={`Labor${quote.hourly_rate ? ` (${formatCurrency(quote.hourly_rate)}/hr × ${quote.estimated_hours ?? 0} hrs)` : ""}`}
-                    value={formatCurrency((quote.hourly_rate ?? 0) * (quote.estimated_hours ?? 0))}
+                    label={`Labor${quote.hourly_rate ? ` (${formatCurrency(quote.hourly_rate)}/worker/hr × ${quote.estimated_hours ?? 0} hrs${quote.crew_size ? ` × ${quote.crew_size} workers` : ""})` : ""}`}
+                    value={formatCurrency((quote.hourly_rate ?? 0) * (quote.estimated_hours ?? 0) * (quote.crew_size ?? 1))}
                   />
                 )}
                 {quote.line_items.map((li, i) => (

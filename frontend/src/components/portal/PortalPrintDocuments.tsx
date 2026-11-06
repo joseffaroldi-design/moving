@@ -39,7 +39,8 @@ function BrandHeader() {
 }
 
 const QUOTE_MONEY: { key: keyof PortalQuoteDetail; label: string; money?: boolean }[] = [
-  { key: "hourly_rate", label: "Hourly rate", money: true },
+  { key: "hourly_rate", label: "Hourly rate per worker", money: true },
+  { key: "crew_size", label: "Crew members" },
   { key: "estimated_hours", label: "Estimated hours" },
   { key: "travel_fee", label: "Travel fee", money: true },
   { key: "packing_fee", label: "Packing fee", money: true },
@@ -79,7 +80,7 @@ export function PortalQuotePrint({ quote }: { quote: PortalQuoteDetail }) {
                   i > 0 ? "border-t border-slate-100" : ""
                 }`}
               >
-                <span className="text-slate-600">{m.label}</span>
+                <span className="text-slate-600">{m.key === "hourly_rate" && quote.crew_size == null ? "Hourly rate" : m.label}</span>
                 <span className="font-medium text-navy">
                   {m.money
                     ? formatCurrency(quote[m.key] as number)
