@@ -237,11 +237,13 @@ export default function PortalQuotes() {
                 Estimate
               </p>
               {detail.hourly_rate != null && (
-                <Row label="Hourly rate" value={formatCurrency(detail.hourly_rate)} />
+                <Row label={detail.crew_size ? "Hourly rate per worker" : "Hourly rate"} value={formatCurrency(detail.hourly_rate)} />
               )}
               {detail.estimated_hours != null && (
                 <Row label="Estimated hours" value={String(detail.estimated_hours)} />
               )}
+              {detail.crew_size != null && <Row label="Crew members" value={String(detail.crew_size)} />}
+              {detail.crew_size != null && <Row label="Labor" value={formatCurrency((detail.hourly_rate ?? 0) * (detail.estimated_hours ?? 0) * detail.crew_size)} />}
               {detail.travel_fee ? <Row label="Travel fee" value={formatCurrency(detail.travel_fee)} /> : null}
               {detail.packing_fee ? <Row label="Packing fee" value={formatCurrency(detail.packing_fee)} /> : null}
               {detail.materials_fee ? <Row label="Materials fee" value={formatCurrency(detail.materials_fee)} /> : null}
