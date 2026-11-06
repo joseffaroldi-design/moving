@@ -15,7 +15,8 @@ function Line({ label, value }: { label: string; value: string }) {
 }
 
 const MONEY: { key: keyof Quote; label: string }[] = [
-  { key: "hourly_rate", label: "Hourly rate" },
+  { key: "hourly_rate", label: "Hourly rate per worker" },
+  { key: "crew_size", label: "Crew members" },
   { key: "estimated_hours", label: "Estimated hours" },
   { key: "travel_fee", label: "Travel fee" },
   { key: "packing_fee", label: "Packing fee" },
@@ -82,7 +83,7 @@ export function QuoteDocument({ quote }: { quote: Quote }) {
             <div key={m.key as string} className={`flex justify-between px-3 py-2 text-[13px] ${i > 0 ? "border-t border-slate-100" : ""}`}>
               <span className="text-slate-600">{m.label}</span>
               <span className="font-medium text-navy">
-                {m.key === "estimated_hours" ? String(quote[m.key]) : formatCurrency(quote[m.key] as number)}
+                {m.key === "estimated_hours" || m.key === "crew_size" ? String(quote[m.key]) : formatCurrency(quote[m.key] as number)}
               </span>
             </div>
           ))}
