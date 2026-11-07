@@ -86,7 +86,7 @@ begin
         'service_date',v_lead.move_date,
         'origin_address',v_lead.origin_address,
         'destination_address',v_lead.destination_address,
-        'service_type',case when split_part(coalesce(v_lead.notes,''), E'\n', 1) = 'Service type: Junk Removal'
+        'service_type',case when coalesce(v_lead.notes,'') ~ '(Service type|Move type): Junk Removal'
           then 'junk_removal' else 'moving' end
       ) || v_details;
     end if;
