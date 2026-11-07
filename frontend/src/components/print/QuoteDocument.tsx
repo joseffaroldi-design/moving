@@ -68,7 +68,8 @@ export function QuoteDocument({ quote }: { quote: Quote }) {
           {contactPhone(quote) && <p className="text-[13px] text-slate-600">{contactPhone(quote)}</p>}
         </div>
         <div className="rounded-md bg-cream-100 p-4">
-          <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-gold-hover">Move details</p>
+          <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-gold-hover">Service details</p>
+          {quote.service_type && <Line label="Service" value={String(quote.service_type)} />}
           <Line label="Move date" value={formatDate(quote.move_date as string)} />
           <Line label="Origin" value={addr(quote as Record<string, unknown>, "origin")} />
           <Line label="Destination" value={addr(quote as Record<string, unknown>, "destination")} />
