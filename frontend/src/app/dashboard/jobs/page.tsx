@@ -138,9 +138,9 @@ export default function JobsPage() {
     finally { setScheduleBusy(false); }
   }
 
-  const activeStep = selected
+  const activeStep = selected?.scheduled_start
     ? Math.max(0, TIMELINE.indexOf(String(selected.status ?? "").toLowerCase()))
-    : 0;
+    : -1;
 
   const forward = selected ? forwardJobTransition(selected.status) : null;
   const canCancelJob = selected ? !isTerminalJobStatus(selected.status) : false;
@@ -261,7 +261,7 @@ export default function JobsPage() {
                       {(j.crew_size ?? "—")} · {(j.truck_count ?? "—")}
                     </Td>
                     <Td>
-                      <StatusBadge status={j.status} label={jobStatusLabel(j.status)} />
+                      <StatusBadge status={j.status} label={!j.scheduled_start ? "Needs Scheduling" : jobStatusLabel(j.status)} />
                     </Td>
                   </Tr>
                 ))}
@@ -279,7 +279,7 @@ export default function JobsPage() {
               >
                 <div className="flex items-center justify-between">
                   <p className="font-medium text-navy">{j.job_number || "—"}</p>
-                  <StatusBadge status={j.status} label={jobStatusLabel(j.status)} />
+                  <StatusBadge status={j.status} label={!j.scheduled_start ? "Needs Scheduling" : jobStatusLabel(j.status)} />
                 </div>
                 <p className="mt-1 text-sm text-slate-600">{jobCustomerName(j)}</p>
                 <p className="mt-1 text-xs text-slate-500">{j.scheduled_start ? formatDateTime(j.scheduled_start) : "Needs scheduling"}</p>
@@ -331,7 +331,7 @@ export default function JobsPage() {
         {selected && (
           <div className="space-y-5">
             <div className="flex items-center justify-between">
-              <StatusBadge status={selected.status} label={jobStatusLabel(selected.status)} />
+              <StatusBadge status={selected.status} label={!selected.scheduled_start ? "Needs Scheduling" : jobStatusLabel(selected.status)} />
               {selected.quote_id ? (
                 <span className="inline-flex items-center gap-1 text-xs text-slate-500">
                   <FileText className="h-3.5 w-3.5" /> From quote
