@@ -14,6 +14,7 @@ const MOVE_TYPES = new Set([
   "Specialty Items",
   "Local Moving",
   "Long-Distance",
+  "Junk Removal",
 ]);
 
 const HOME_SIZES = new Set([

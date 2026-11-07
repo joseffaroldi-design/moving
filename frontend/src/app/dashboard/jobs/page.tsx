@@ -18,6 +18,7 @@ import { useToast } from "@/components/ui/toast";
 import { formatDate, formatDateTime } from "@/lib/format";
 import {
   fetchJobs,
+  scheduleConfirmedJob,
   jobStatusLabel,
   JOB_STATUSES,
   setJobStatus,
@@ -56,6 +57,8 @@ export default function JobsPage() {
   const [invoiceChecking, setInvoiceChecking] = useState(false);
   const [generatingInvoice, setGeneratingInvoice] = useState(false);
   const busyRef = useRef(false);
+  const [scheduleBusy,setScheduleBusy] = useState(false);
+  const [scheduleForm,setScheduleForm] = useState({ start: "", end: "", origin: "", destination: "", crew: "2", trucks: "1" });
 
   const load = useCallback(async () => {
     if (!companyId) {
@@ -94,9 +97,50 @@ export default function JobsPage() {
     [jobs, selectedId]
   );
 
-  const activeStep = selected
+  useEffect(() => {
+    if (!selected) return;
+    const toLocal = (v: string | null) => {
+      if (!v) return "";
+      const d = new Date(v);
+      const local = new Date(d.getTime() - d.getTimezoneOffset()*60000);
+      return local.toISOString().slice(0,16);
+    };
+    setScheduleForm({
+      start: toLocal(selected.scheduled_start), end: toLocal(selected.scheduled_end),
+      origin: selected.origin_address ?? "", destination: selected.destination_address ?? "",
+      crew: String(selected.crew_size ?? 2), trucks: String(selected.truck_count ?? 1),
+    });
+  }, [selectedId]);
+
+  async function saveSchedule() {
+    if (!selected || scheduleBusy) return;
+    if (!scheduleForm.start || !scheduleForm.origin.trim() || (selected.service_type !== "junk_removal" && !scheduleForm.destination.trim())) {
+      toast("Enter an appointment time and pickup address; moves also require a destination.", "error");
+      return;
+    }
+    const start = new Date(scheduleForm.start);
+    const end = scheduleForm.end ? new Date(scheduleForm.end) : null;
+    if (Number.isNaN(start.getTime()) || (end && (Number.isNaN(end.getTime()) || end <= start))) {
+      toast("Enter a valid start time and a later end time.", "error");
+      return;
+    }
+    setScheduleBusy(true);
+    try {
+      await scheduleConfirmedJob({
+        job_id: selected.id, scheduled_start: start.toISOString(),
+        scheduled_end: end?.toISOString() ?? null,
+        origin_address: scheduleForm.origin.trim(), destination_address: scheduleForm.destination.trim() || null,
+        crew_size: Number(scheduleForm.crew), truck_count: Number(scheduleForm.trucks),
+      });
+      toast("Job scheduled.", "success");
+      await load();
+    } catch(e) { toast(e instanceof Error ? e.message : "Could not schedule job.", "error"); }
+    finally { setScheduleBusy(false); }
+  }
+
+  const activeStep = selected?.scheduled_start
     ? Math.max(0, TIMELINE.indexOf(String(selected.status ?? "").toLowerCase()))
-    : 0;
+    : -1;
 
   const forward = selected ? forwardJobTransition(selected.status) : null;
   const canCancelJob = selected ? !isTerminalJobStatus(selected.status) : false;
@@ -209,7 +253,7 @@ export default function JobsPage() {
                   <Tr key={j.id ?? i} data-testid={`job-row-${i}`} onClick={() => setSelectedId(j.id)}>
                     <Td className="font-medium text-navy">{j.job_number || "—"}</Td>
                     <Td>{jobCustomerName(j)}</Td>
-                    <Td className="text-slate-500">{formatDateTime(j.scheduled_start)}</Td>
+                    <Td className="text-slate-500">{j.scheduled_start ? formatDateTime(j.scheduled_start) : "Needs scheduling"}</Td>
                     <Td className="max-w-[220px] truncate text-slate-500">
                       {j.origin_address || "—"} → {j.destination_address || "—"}
                     </Td>
@@ -217,7 +261,7 @@ export default function JobsPage() {
                       {(j.crew_size ?? "—")} · {(j.truck_count ?? "—")}
                     </Td>
                     <Td>
-                      <StatusBadge status={j.status} label={jobStatusLabel(j.status)} />
+                      <StatusBadge status={j.status} label={!j.scheduled_start ? "Needs Scheduling" : jobStatusLabel(j.status)} />
                     </Td>
                   </Tr>
                 ))}
@@ -235,10 +279,10 @@ export default function JobsPage() {
               >
                 <div className="flex items-center justify-between">
                   <p className="font-medium text-navy">{j.job_number || "—"}</p>
-                  <StatusBadge status={j.status} label={jobStatusLabel(j.status)} />
+                  <StatusBadge status={j.status} label={!j.scheduled_start ? "Needs Scheduling" : jobStatusLabel(j.status)} />
                 </div>
                 <p className="mt-1 text-sm text-slate-600">{jobCustomerName(j)}</p>
-                <p className="mt-1 text-xs text-slate-500">{formatDateTime(j.scheduled_start)}</p>
+                <p className="mt-1 text-xs text-slate-500">{j.scheduled_start ? formatDateTime(j.scheduled_start) : "Needs scheduling"}</p>
               </button>
             ))}
           </div>
@@ -254,7 +298,7 @@ export default function JobsPage() {
           selected && !isTerminalJobStatus(selected.status) ? (
             canManageStatus ? (
               <div className="flex flex-wrap gap-2" data-testid="job-status-actions">
-                {forward && (
+                {forward && selected.scheduled_start && (
                   <Button
                     variant="gold"
                     className="flex-1"
@@ -287,13 +331,29 @@ export default function JobsPage() {
         {selected && (
           <div className="space-y-5">
             <div className="flex items-center justify-between">
-              <StatusBadge status={selected.status} label={jobStatusLabel(selected.status)} />
+              <StatusBadge status={selected.status} label={!selected.scheduled_start ? "Needs Scheduling" : jobStatusLabel(selected.status)} />
               {selected.quote_id ? (
                 <span className="inline-flex items-center gap-1 text-xs text-slate-500">
                   <FileText className="h-3.5 w-3.5" /> From quote
                 </span>
               ) : null}
             </div>
+
+            {canManageStatus && (selected.status === "confirmed" || selected.status === "scheduled") && (
+              <div className="space-y-3 rounded-md border border-slate-200 p-3" data-testid="schedule-job-form">
+                <h4 className="text-sm font-semibold text-navy">{selected.scheduled_start ? "Edit schedule" : "Complete job scheduling"}</h4>
+                {!selected.scheduled_start && <p className="text-xs text-amber-700">Accepted quote created this job automatically. Confirm an exact date and time before dispatching or starting work.</p>}
+                <div><label className="text-xs text-slate-600">Start date &amp; time *</label><Input data-testid="job-schedule-start" type="datetime-local" value={scheduleForm.start} onChange={(e) => setScheduleForm(x => ({...x,start:e.target.value}))} /></div>
+                <div><label className="text-xs text-slate-600">End date &amp; time</label><Input type="datetime-local" value={scheduleForm.end} onChange={(e) => setScheduleForm(x => ({...x,end:e.target.value}))} /></div>
+                <div><label className="text-xs text-slate-600">Pickup / service address *</label><Input value={scheduleForm.origin} onChange={(e) => setScheduleForm(x => ({...x,origin:e.target.value}))} /></div>
+                <div><label className="text-xs text-slate-600">Destination {selected.service_type === "junk_removal" ? "(optional)" : "*"}</label><Input value={scheduleForm.destination} onChange={(e) => setScheduleForm(x => ({...x,destination:e.target.value}))} /></div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div><label className="text-xs text-slate-600">Crew members</label><Input type="number" min="1" max="20" value={scheduleForm.crew} onChange={(e) => setScheduleForm(x => ({...x,crew:e.target.value}))} /></div>
+                  <div><label className="text-xs text-slate-600">Trucks</label><Input type="number" min="0" max="20" value={scheduleForm.trucks} onChange={(e) => setScheduleForm(x => ({...x,trucks:e.target.value}))} /></div>
+                </div>
+                <Button variant="gold" loading={scheduleBusy} data-testid="save-job-schedule" onClick={saveSchedule}>Save confirmed schedule</Button>
+              </div>
+            )}
 
             {/* Timeline */}
             {selected.status !== "cancelled" && (

@@ -67,6 +67,18 @@ export function PortalQuotePrint({ quote }: { quote: PortalQuoteDetail }) {
         </div>
       </div>
 
+      {(quote.service_type || quote.service_date || quote.origin_address || quote.destination_address || quote.access_details || quote.service_notes) && (
+        <div className="mt-6 rounded-md bg-cream-100 p-4 text-[13px] text-slate-700">
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-gold-hover">Service details</p>
+          {quote.service_type && <Line label="Service" value={quote.service_type === "junk_removal" ? "Junk Removal" : "Moving"} />}
+          {quote.service_date && <Line label="Preferred date" value={formatDate(quote.service_date)} />}
+          {quote.origin_address && <Line label="Pickup / service address" value={quote.origin_address} />}
+          {quote.destination_address && <Line label="Destination" value={quote.destination_address} />}
+          {quote.access_details && <p className="mt-2 whitespace-pre-wrap">Access: {quote.access_details}</p>}
+          {quote.service_notes && <p className="mt-2 whitespace-pre-wrap">Items / instructions: {quote.service_notes}</p>}
+        </div>
+      )}
+
       <div className="mt-6">
         <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-gold-hover">
           Itemized charges
