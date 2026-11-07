@@ -289,7 +289,7 @@ export async function updateDraftQuoteWithItems(
 
 export async function duplicateQuote(quoteId: string) {
   const supabase = getBrowserClient();
-  const { data, error } = await supabase.rpc("duplicate_quote", { p_quote_id: quoteId });
+  const { data, error } = await supabase.rpc("duplicate_quote_with_service", { p_quote_id: quoteId });
   if (error) throw new Error(error.message);
   return data as { quote_id: string; quote_number: string };
 }
@@ -334,6 +334,12 @@ export interface PublicQuoteLineItem {
 }
 
 export interface PublicQuote {
+  service_type?: "moving" | "junk_removal";
+  service_date?: string | null;
+  origin_address?: string | null;
+  destination_address?: string | null;
+  access_details?: string | null;
+  service_notes?: string | null;
   crew_size: number | null;
   id: string;
   quote_number: string;
