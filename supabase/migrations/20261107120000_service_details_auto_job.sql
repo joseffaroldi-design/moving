@@ -282,4 +282,37 @@ begin
 end;
 $function$
 ;
+
+-- Copy service and PDF details when staff duplicates an existing quote.
+create or replace function public.duplicate_quote_with_service(p_quote_id uuid)
+returns json language plpgsql security definer set search_path = public, pg_temp as $
+declare v_company uuid := public._require_quote_mutator(); v_src public.quotes%rowtype; v_result json;
+begin
+  select * into v_src from public.quotes where id=p_quote_id;
+  if not found or v_src.company_id<>v_company then raise exception 'Quote not found'; end if;
+  v_result := public.duplicate_quote(p_quote_id);
+  perform public.set_draft_quote_details((v_result->>'quote_id')::uuid,
+    jsonb_build_object('service_type',v_src.service_type,'service_date',v_src.service_date,
+      'origin_address',v_src.origin_address,'destination_address',v_src.destination_address,
+      'access_details',v_src.access_details,'service_notes',v_src.service_notes));
+  return v_result;
+end; $;
+revoke all on function public.duplicate_quote_with_service(uuid) from public,anon,service_role;
+grant execute on function public.duplicate_quote_with_service(uuid) to authenticated;
+
+-- The separate job-status RPC must not start an unscheduled job.
+create or replace function public._guard_unscheduled_job_progress()
+returns trigger language plpgsql set search_path=public,pg_temp as $
+begin
+ if new.status::text in ('in_progress','completed')
+    and (new.scheduled_start is null or nullif(btrim(coalesce(new.origin_address,'')),'') is null) then
+   raise exception 'Schedule the job and confirm the pickup location before starting work';
+ end if;
+ return new;
+end; $;
+drop trigger if exists guard_unscheduled_job_progress on public.jobs;
+create trigger guard_unscheduled_job_progress
+before update of status on public.jobs
+for each row execute function public._guard_unscheduled_job_progress();
+
 commit;
