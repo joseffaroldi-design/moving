@@ -635,7 +635,7 @@ function QuoteBuilderDrawer({
                     const lead = leads.find((item) => item.id === id);
                     if (lead) setForm((previous) => ({
                       ...previous,
-                      service_type: /^Service type: Junk Removal$/m.test(lead.notes ?? "") ? "junk_removal" : "moving",
+                      service_type: /^(?:Service type|Move type): Junk Removal$/m.test(lead.notes ?? "") ? "junk_removal" : "moving",
                       service_date: lead.move_date?.slice(0,10) ?? "",
                       origin_address: lead.origin_address ?? "",
                       destination_address: lead.destination_address ?? "",
