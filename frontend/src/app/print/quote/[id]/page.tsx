@@ -40,7 +40,7 @@ export default async function QuotePrintPage({
           .eq("company_id", q.company_id)
           .maybeSingle();
         if (linkedLead) {
-          const service = String(linkedLead.notes ?? "").match(/^Service type:\s*(Moving|Junk Removal)\s*$/m);
+          const service = String(linkedLead.notes ?? "").match(/^(?:Service type|Move type):\s*(Moving|Junk Removal)\s*$/m);
           leadDetails = {
             move_date: linkedLead.move_date,
             origin_address: linkedLead.origin_address,
