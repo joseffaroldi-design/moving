@@ -86,7 +86,7 @@ begin
         'service_date',v_lead.move_date,
         'origin_address',v_lead.origin_address,
         'destination_address',v_lead.destination_address,
-        'service_type',case when coalesce(v_lead.notes,'') ~* '^Service type: Junk Removal$'
+        'service_type',case when split_part(coalesce(v_lead.notes,''), E'\n', 1) = 'Service type: Junk Removal'
           then 'junk_removal' else 'moving' end
       ) || v_details;
     end if;
@@ -189,4 +189,97 @@ end; $$;
 revoke all on function public.schedule_confirmed_job(uuid,timestamptz,text,text,timestamptz,integer,integer) from public,anon,service_role;
 grant execute on function public.schedule_confirmed_job(uuid,timestamptz,text,text,timestamptz,integer,integer) to authenticated;
 
+-- Existing scoped quote readers gain safe, customer-visible service details.
+CREATE OR REPLACE FUNCTION public.get_quote_by_approval_token(p_token text)
+ RETURNS json
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'extensions', 'pg_temp'
+AS $function$
+declare t public.quote_approval_tokens; q record; v_items json; v_profile record;
+begin
+  t := public._require_quote_approval_token(p_token);
+  select * into q from public.quotes where id = t.quote_id;
+  if not found or q.status::text not in ('sent','viewed') then
+    raise exception 'This quote link is invalid or unavailable';
+  end if;
+  if q.expires_at is not null and q.expires_at <= now() then
+    update public.quotes set status = 'expired', updated_at = now() where id = q.id;
+    raise exception 'This quote has expired';
+  end if;
+
+  update public.quote_approval_tokens set last_viewed_at = now() where id = t.id;
+  if q.status::text = 'sent' then
+    update public.quotes set status = 'viewed', updated_at = now() where id = q.id;
+    q.status := 'viewed'::public.quote_status;
+  end if;
+
+  select coalesce(json_agg(json_build_object(
+    'description', description, 'quantity', quantity, 'unit_price', unit_price,
+    'total', total, 'sort_order', sort_order) order by sort_order), '[]'::json)
+    into v_items from public.quote_line_items where quote_id = q.id;
+  select first_name, last_name into v_profile
+    from public.customers where id = q.customer_id;
+
+  return json_build_object(
+    'id', q.id, 'quote_number', q.quote_number, 'status', q.status::text,
+    'created_at', q.created_at, 'expires_at', q.expires_at,
+    'hourly_rate', q.hourly_rate, 'estimated_hours', q.estimated_hours, 'crew_size', q.crew_size,
+    'travel_fee', q.travel_fee, 'packing_fee', q.packing_fee,
+    'materials_fee', q.materials_fee, 'discount', q.discount,
+    'subtotal', q.subtotal, 'tax_rate', q.tax_rate, 'tax', q.tax,
+    'total', q.total, 'deposit_percent', q.deposit_percent,
+    'deposit_amount', q.deposit_amount,
+    'service_type', q.service_type, 'service_date', q.service_date,
+    'origin_address', q.origin_address, 'destination_address', q.destination_address,
+    'access_details', q.access_details, 'service_notes', q.service_notes,
+    'customer', json_build_object('first_name', v_profile.first_name, 'last_name', v_profile.last_name),
+    'line_items', v_items
+  );
+end;
+$function$
+;
+-- Existing scoped quote readers gain safe, customer-visible service details.
+CREATE OR REPLACE FUNCTION public.portal_get_quote(p_quote_id uuid)
+ RETURNS json
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+declare
+  v_cust uuid := public._portal_current_customer_id();
+  q record;
+  v_items json;
+begin
+  if v_cust is null then raise exception 'Not authorized as a customer'; end if;
+  select id, quote_number, status, created_at, expires_at, accepted_at,
+         hourly_rate, estimated_hours, crew_size, travel_fee, packing_fee, materials_fee,
+         discount, subtotal, tax_rate, tax, total, deposit_percent, deposit_amount,
+         service_type, service_date, origin_address, destination_address, access_details, service_notes
+    into q
+  from public.quotes
+  where id = p_quote_id and customer_id = v_cust and status::text <> 'draft';
+  if not found then raise exception 'Quote not found'; end if;
+  select coalesce(json_agg(json_build_object(
+           'description', li.description, 'quantity', li.quantity,
+           'unit_price', li.unit_price, 'total', li.total, 'sort_order', li.sort_order)
+           order by li.sort_order), '[]'::json)
+    into v_items
+  from public.quote_line_items li where li.quote_id = q.id;
+  return json_build_object(
+    'id', q.id, 'quote_number', q.quote_number, 'status', q.status::text,
+    'created_at', q.created_at, 'expires_at', q.expires_at, 'accepted_at', q.accepted_at,
+    'hourly_rate', q.hourly_rate, 'estimated_hours', q.estimated_hours, 'crew_size', q.crew_size,
+    'travel_fee', q.travel_fee, 'packing_fee', q.packing_fee,
+    'materials_fee', q.materials_fee, 'discount', q.discount,
+    'subtotal', q.subtotal, 'tax_rate', q.tax_rate, 'tax', q.tax,
+    'total', q.total, 'deposit_percent', q.deposit_percent,
+    'deposit_amount', q.deposit_amount,
+    'service_type', q.service_type, 'service_date', q.service_date,
+    'origin_address', q.origin_address, 'destination_address', q.destination_address,
+    'access_details', q.access_details, 'service_notes', q.service_notes, 'line_items', v_items
+  );
+end;
+$function$
+;
 commit;
