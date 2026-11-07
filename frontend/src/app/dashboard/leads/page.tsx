@@ -625,7 +625,7 @@ function LeadDetailDrawer({
                 <DetailRow label="Origin" value={addr(lead, "origin")} />
                 <DetailRow label="Destination" value={addr(lead, "destination")} />
                 <DetailRow label="Service Date" value={formatDate(lead.move_date as string)} />
-                <DetailRow label="Service" value={/^Service type: Junk Removal$/m.test(lead.notes ?? "") ? "Junk Removal" : "Moving"} />
+                <DetailRow label="Service" value={/^(?:Service type|Move type): Junk Removal$/m.test(lead.notes ?? "") ? "Junk Removal" : "Moving"} />
                 {intake.moveType && <DetailRow label="Move Type" value={intake.moveType} />}
                 {intake.homeSize && <DetailRow label="Home Size" value={intake.homeSize} />}
                 {intake.services && <DetailRow label="Services" value={intake.services} />}
