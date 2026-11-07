@@ -82,6 +82,12 @@ export interface QuoteRecord {
   hourly_rate: number | null;
   estimated_hours: number | null;
   crew_size: number | null;
+  service_type?: "moving" | "junk_removal";
+  service_date?: string | null;
+  origin_address?: string | null;
+  destination_address?: string | null;
+  access_details?: string | null;
+  service_notes?: string | null;
   travel_fee: number | null;
   packing_fee: number | null;
   materials_fee: number | null;
@@ -198,6 +204,12 @@ export interface QuoteLineItemInput {
 }
 
 export interface QuoteScalarInput {
+  service_type?: "moving" | "junk_removal";
+  service_date?: string | null;
+  origin_address?: string | null;
+  destination_address?: string | null;
+  access_details?: string | null;
+  service_notes?: string | null;
   hourly_rate?: number | null;
   estimated_hours?: number | null;
   crew_size?: number | null;
@@ -216,11 +228,23 @@ export interface CreateQuoteInput extends QuoteScalarInput {
   customer_id?: string | null;
 }
 
+function serviceDetails(input: QuoteScalarInput) {
+  return {
+    service_type: input.service_type ?? "moving",
+    service_date: input.service_date ?? null,
+    origin_address: input.origin_address ?? null,
+    destination_address: input.destination_address ?? null,
+    access_details: input.access_details ?? null,
+    service_notes: input.service_notes ?? null,
+  };
+}
+
 export async function createQuoteWithItems(
   input: CreateQuoteInput
 ): Promise<{ quote_id: string; quote_number: string }> {
   const supabase = getBrowserClient();
-  const { data, error } = await supabase.rpc("create_quote_with_crew", {
+  const { data, error } = await supabase.rpc("create_quote_with_service", {
+    p_details: serviceDetails(input),
     p_lead_id: input.lead_id ?? null,
     p_customer_id: input.customer_id ?? null,
     p_hourly_rate: input.hourly_rate ?? null,
@@ -244,7 +268,8 @@ export async function updateDraftQuoteWithItems(
   input: QuoteScalarInput
 ): Promise<{ quote_id: string }> {
   const supabase = getBrowserClient();
-  const { data, error } = await supabase.rpc("update_draft_quote_with_crew", {
+  const { data, error } = await supabase.rpc("update_draft_quote_with_service", {
+    p_details: serviceDetails(input),
     p_quote_id: quoteId,
     p_hourly_rate: input.hourly_rate ?? null,
     p_estimated_hours: input.estimated_hours ?? null,
