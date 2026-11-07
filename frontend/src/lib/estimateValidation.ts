@@ -11,6 +11,7 @@ export const MOVE_TYPES = [
   "Specialty Items",
   "Local Moving",
   "Long-Distance",
+  "Junk Removal",
 ] as const;
 
 export const HOME_SIZES = [
