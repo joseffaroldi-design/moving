@@ -434,12 +434,13 @@ function LeadDetailDrawer({
       email: contactEmail(lead) ?? "",
       phone: contactPhone(lead) ?? "",
       source: (lead.source as string) ?? "",
+      service_type: /^Service type:\s*(Junk Removal)\s*$/m.test(lead.notes ?? "") ? "Junk Removal" : "Moving",
       move_date: ((lead.move_date as string) ?? "").slice(0, 10),
       origin_address: (lead.origin_address as string) ?? "",
       destination_address: (lead.destination_address as string) ?? "",
       bedrooms: lead.bedrooms != null ? String(lead.bedrooms) : "",
       estimated_volume_cuft: lead.estimated_volume_cuft != null ? String(lead.estimated_volume_cuft) : "",
-      notes: (lead.notes as string) ?? "",
+      notes: String(lead.notes ?? "").replace(/^Service type: (Moving|Junk Removal)\n?/, ""),
     });
     setEditing(true);
   }
@@ -489,7 +490,7 @@ function LeadDetailDrawer({
         destination_address: editForm.destination_address.trim() || null,
         bedrooms: bedrooms ? Number(bedrooms) : null,
         estimated_volume_cuft: volume ? Number(volume) : null,
-        notes: editForm.notes.trim() || null,
+        notes: [`Service type: ${editForm.service_type}`, editForm.notes.trim()].filter(Boolean).join("\n"),
       });
       toast("Lead updated.", "success");
       setEditing(false);
@@ -588,7 +589,13 @@ function LeadDetailDrawer({
               <Field label="Email"><Input data-testid="edit-email" type="email" value={editForm.email} onChange={(e) => updateEdit("email", e.target.value)} /></Field>
               <Field label="Phone"><Input data-testid="edit-phone" value={editForm.phone} onChange={(e) => updateEdit("phone", e.target.value)} /></Field>
               <Field label="Source"><Input data-testid="edit-source" value={editForm.source} onChange={(e) => updateEdit("source", e.target.value)} placeholder="Website, referral…" /></Field>
-              <Field label="Move date"><Input data-testid="edit-move-date" type="date" value={editForm.move_date} onChange={(e) => updateEdit("move_date", e.target.value)} /></Field>
+              <Field label="Service type">
+                <Select data-testid="edit-service-type" value={editForm.service_type} onChange={(e) => updateEdit("service_type", e.target.value)}>
+                  <option value="Moving">Moving</option>
+                  <option value="Junk Removal">Junk Removal</option>
+                </Select>
+              </Field>
+              <Field label="Service date"><Input data-testid="edit-move-date" type="date" value={editForm.move_date} onChange={(e) => updateEdit("move_date", e.target.value)} /></Field>
               <Field label="Origin address" wide><Input data-testid="edit-origin" value={editForm.origin_address} onChange={(e) => updateEdit("origin_address", e.target.value)} /></Field>
               <Field label="Destination address" wide><Input data-testid="edit-destination" value={editForm.destination_address} onChange={(e) => updateEdit("destination_address", e.target.value)} /></Field>
               <Field label="Bedrooms"><Input data-testid="edit-bedrooms" type="number" min="0" value={editForm.bedrooms} onChange={(e) => updateEdit("bedrooms", e.target.value)} /></Field>
@@ -617,7 +624,8 @@ function LeadDetailDrawer({
                 <DetailRow label="Phone" value={contactPhone(lead) || "—"} />
                 <DetailRow label="Origin" value={addr(lead, "origin")} />
                 <DetailRow label="Destination" value={addr(lead, "destination")} />
-                <DetailRow label="Move Date" value={formatDate(lead.move_date as string)} />
+                <DetailRow label="Service Date" value={formatDate(lead.move_date as string)} />
+                <DetailRow label="Service" value={/^Service type: Junk Removal$/m.test(lead.notes ?? "") ? "Junk Removal" : "Moving"} />
                 {intake.moveType && <DetailRow label="Move Type" value={intake.moveType} />}
                 {intake.homeSize && <DetailRow label="Home Size" value={intake.homeSize} />}
                 {intake.services && <DetailRow label="Services" value={intake.services} />}
