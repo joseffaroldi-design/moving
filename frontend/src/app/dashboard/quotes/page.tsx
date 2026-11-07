@@ -313,6 +313,12 @@ const EMPTY_BUILDER = {
   hourly_rate: "",
   estimated_hours: "",
   crew_size: "1",
+  service_type: "moving",
+  service_date: "",
+  origin_address: "",
+  destination_address: "",
+  access_details: "",
+  service_notes: "",
   travel_fee: "",
   packing_fee: "",
   materials_fee: "",
@@ -366,6 +372,12 @@ function QuoteBuilderDrawer({
         hourly_rate: editQuote.hourly_rate?.toString() ?? "",
         estimated_hours: editQuote.estimated_hours?.toString() ?? "",
         crew_size: editQuote.crew_size?.toString() ?? "1",
+        service_type: editQuote.service_type ?? "moving",
+        service_date: editQuote.service_date?.slice(0,10) ?? "",
+        origin_address: editQuote.origin_address ?? "",
+        destination_address: editQuote.destination_address ?? "",
+        access_details: editQuote.access_details ?? "",
+        service_notes: editQuote.service_notes ?? "",
         travel_fee: editQuote.travel_fee?.toString() ?? "",
         packing_fee: editQuote.packing_fee?.toString() ?? "",
         materials_fee: editQuote.materials_fee?.toString() ?? "",
@@ -435,6 +447,7 @@ function QuoteBuilderDrawer({
       if (sourceType === "customer" && !customerId) return "Select a customer.";
       if (sourceType === "lead" && !leadId) return "Select a lead.";
     }
+    if (!["moving", "junk_removal"].includes(form.service_type)) return "Select a valid service type.";
     if (!Number.isInteger(Number(form.crew_size)) || Number(form.crew_size) < 1 || Number(form.crew_size) > 20)
       return "Crew size must be between 1 and 20.";
     if (toNum(form.tax_rate) < 0 || toNum(form.tax_rate) > 100)
@@ -476,6 +489,12 @@ function QuoteBuilderDrawer({
       hourly_rate: form.hourly_rate ? toNum(form.hourly_rate) : null,
       estimated_hours: form.estimated_hours ? toNum(form.estimated_hours) : null,
       crew_size: Number(form.crew_size),
+      service_type: form.service_type as "moving" | "junk_removal",
+      service_date: form.service_date || null,
+      origin_address: form.origin_address.trim() || null,
+      destination_address: form.destination_address.trim() || null,
+      access_details: form.access_details.trim() || null,
+      service_notes: form.service_notes.trim() || null,
       travel_fee: toNum(form.travel_fee),
       packing_fee: toNum(form.packing_fee),
       materials_fee: toNum(form.materials_fee),
@@ -610,7 +629,18 @@ function QuoteBuilderDrawer({
                 <Select
                   data-testid="quote-lead-select"
                   value={leadId}
-                  onChange={(e) => setLeadId(e.target.value)}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    setLeadId(id);
+                    const lead = leads.find((item) => item.id === id);
+                    if (lead) setForm((previous) => ({
+                      ...previous,
+                      service_type: /^Service type: Junk Removal$/m.test(lead.notes ?? "") ? "junk_removal" : "moving",
+                      service_date: lead.move_date?.slice(0,10) ?? "",
+                      origin_address: lead.origin_address ?? "",
+                      destination_address: lead.destination_address ?? "",
+                    }));
+                  }}
                   className="w-full"
                 >
                   <option value="">Select a lead…</option>
@@ -624,6 +654,23 @@ function QuoteBuilderDrawer({
             )}
           </div>
         )}
+
+        {/* Customer-facing service details saved on the quote, not only in its PDF. */}
+        <div className="space-y-3 rounded-md border border-slate-200 p-3">
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Service &amp; Quote PDF Details</h4>
+          <div><Label>Service type</Label>
+            <Select data-testid="quote-service-type" value={form.service_type} onChange={(e) => upd("service_type",e.target.value)}>
+              <option value="moving">Moving</option>
+              <option value="junk_removal">Junk Removal</option>
+            </Select>
+          </div>
+          <div><Label>Preferred service date</Label><Input type="date" data-testid="quote-service-date" value={form.service_date} onChange={(e) => upd("service_date",e.target.value)} /></div>
+          <div><Label>Pickup / service address</Label><Input data-testid="quote-origin-address" value={form.origin_address} onChange={(e) => upd("origin_address",e.target.value)} /></div>
+          <div><Label>Destination (optional for junk removal)</Label><Input data-testid="quote-destination-address" value={form.destination_address} onChange={(e) => upd("destination_address",e.target.value)} /></div>
+          <div><Label>Access details (stairs, elevator, gate, parking)</Label><textarea data-testid="quote-access-details" rows={2} value={form.access_details} onChange={(e) => upd("access_details",e.target.value)} className="w-full rounded-md border border-slate-300 p-2 text-sm" /></div>
+          <div><Label>Items, inventory and customer-facing instructions</Label><textarea data-testid="quote-service-notes" rows={3} value={form.service_notes} onChange={(e) => upd("service_notes",e.target.value)} className="w-full rounded-md border border-slate-300 p-2 text-sm" /></div>
+          <p className="text-xs text-slate-500">These fields are saved with the quote and included on the printable PDF. No appointment time is confirmed until a job is scheduled.</p>
+        </div>
 
         {/* Labor */}
         <div>
