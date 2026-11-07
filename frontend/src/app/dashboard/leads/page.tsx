@@ -36,6 +36,7 @@ const EMPTY_FORM = {
   email: "",
   phone: "",
   source: "",
+  service_type: "Moving",
   move_date: "",
   origin_address: "",
   destination_address: "",
@@ -320,7 +321,7 @@ function NewLeadDrawer({
         destination_address: form.destination_address.trim() || null,
         bedrooms: form.bedrooms ? Number(form.bedrooms) : null,
         estimated_volume_cuft: form.estimated_volume_cuft ? Number(form.estimated_volume_cuft) : null,
-        notes: form.notes.trim() || null,
+        notes: [`Service type: ${form.service_type}`, form.notes.trim()].filter(Boolean).join("\n"),
       });
       onCreated();
     } catch (e) {
@@ -351,7 +352,13 @@ function NewLeadDrawer({
         <Field label="Email"><Input data-testid="lead-email" type="email" value={form.email} onChange={(e) => update("email", e.target.value)} /></Field>
         <Field label="Phone"><Input data-testid="lead-phone" value={form.phone} onChange={(e) => update("phone", e.target.value)} /></Field>
         <Field label="Source"><Input data-testid="lead-source" value={form.source} onChange={(e) => update("source", e.target.value)} placeholder="Website, referral…" /></Field>
-        <Field label="Move date"><Input data-testid="lead-move-date" type="date" value={form.move_date} onChange={(e) => update("move_date", e.target.value)} /></Field>
+        <Field label="Service type">
+          <Select data-testid="lead-service-type" value={form.service_type} onChange={(e) => update("service_type", e.target.value)}>
+            <option value="Moving">Moving</option>
+            <option value="Junk Removal">Junk Removal</option>
+          </Select>
+        </Field>
+        <Field label="Service date"><Input data-testid="lead-move-date" type="date" value={form.move_date} onChange={(e) => update("move_date", e.target.value)} /></Field>
         <Field label="Origin address" wide><Input data-testid="lead-origin" value={form.origin_address} onChange={(e) => update("origin_address", e.target.value)} /></Field>
         <Field label="Destination address" wide><Input data-testid="lead-destination" value={form.destination_address} onChange={(e) => update("destination_address", e.target.value)} /></Field>
         <Field label="Bedrooms"><Input data-testid="lead-bedrooms" type="number" min="0" value={form.bedrooms} onChange={(e) => update("bedrooms", e.target.value)} /></Field>
