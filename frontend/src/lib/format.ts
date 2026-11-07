@@ -13,7 +13,13 @@ export function formatCurrency(value: number | string | null | undefined): strin
 
 export function formatDate(value: string | Date | null | undefined): string {
   if (!value) return "—";
-  const d = typeof value === "string" ? new Date(value) : value;
+  // Postgres date-only values are calendar dates, not UTC instants.
+  // Parsing YYYY-MM-DD as UTC would display the previous day in Louisiana.
+  const d = typeof value === "string"
+    ? /^\\d{4}-\\d{2}-\\d{2}$/.test(value)
+      ? new Date(value + "T12:00:00")
+      : new Date(value)
+    : value;
   if (Number.isNaN(d.getTime())) return "—";
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
