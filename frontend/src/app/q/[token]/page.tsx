@@ -102,7 +102,7 @@ export default function QuoteApprovalPage() {
           <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-card" data-testid="approval-quote">
             <div className="border-b border-slate-100 bg-navy px-6 py-5 text-white">
               <p className="text-xs font-semibold uppercase tracking-[0.25em] text-gold">
-                Moving Estimate
+                {quote.service_type === "junk_removal" ? "Junk Removal Estimate" : "Moving Estimate"}
               </p>
               <div className="mt-1 flex items-end justify-between">
                 <h1 className="font-serif text-2xl font-bold">{quote.quote_number}</h1>
@@ -116,6 +116,16 @@ export default function QuoteApprovalPage() {
             </div>
 
             <div className="px-6 py-5">
+              {(quote.service_date || quote.origin_address || quote.destination_address || quote.access_details || quote.service_notes) && (
+                <div className="mb-5 space-y-2 rounded-md border border-slate-200 bg-cream-100 p-4 text-sm text-navy">
+                  <p className="font-semibold">Service details</p>
+                  {quote.service_date && <p>Preferred date: {formatDate(quote.service_date)}</p>}
+                  {quote.origin_address && <p>Pickup / service: {quote.origin_address}</p>}
+                  {quote.destination_address && <p>Destination: {quote.destination_address}</p>}
+                  {quote.access_details && <p className="whitespace-pre-wrap">Access: {quote.access_details}</p>}
+                  {quote.service_notes && <p className="whitespace-pre-wrap">Items / instructions: {quote.service_notes}</p>}
+                </div>
+              )}
               <div className="rounded-md border border-slate-200">
                 {(quote.hourly_rate || quote.estimated_hours) && (
                   <Row
