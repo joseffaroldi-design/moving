@@ -315,4 +315,135 @@ create trigger guard_unscheduled_job_progress
 before update of status on public.jobs
 for each row execute function public._guard_unscheduled_job_progress();
 
+-- Align the authoritative public-intake RPC whitelist with the Edge Function.
+CREATE OR REPLACE FUNCTION public.create_public_lead(p_payload jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+declare
+  c_company constant uuid := 'f05941f2-13db-4779-a1f3-2d6a74ccffcd';
+  c_move_types constant text[] := array[
+    'Residential Moving','Commercial Moving','Packing Services',
+    'Specialty Items','Local Moving','Long-Distance','Junk Removal'];
+
+  v_company     uuid;
+  v_key_hash    text := btrim(coalesce(p_payload->>'key_hash',''));
+  v_payload_hash text := btrim(coalesce(p_payload->>'payload_hash',''));
+  v_existing_ph text;
+  v_claimed     text;
+
+  v_first   text := btrim(coalesce(p_payload->>'first_name',''));
+  v_last    text := btrim(coalesce(p_payload->>'last_name',''));
+  v_email   text := nullif(btrim(coalesce(p_payload->>'email','')), '');
+  v_phone   text := nullif(btrim(coalesce(p_payload->>'phone','')), '');
+  v_origin  text := nullif(btrim(coalesce(p_payload->>'origin_address','')), '');
+  v_dest    text := nullif(btrim(coalesce(p_payload->>'destination_address','')), '');
+  v_notes   text := nullif(btrim(coalesce(p_payload->>'notes','')), '');
+  v_cnotes  text := nullif(btrim(coalesce(p_payload->>'customer_notes','')), '');
+  v_mtype   text := nullif(btrim(coalesce(p_payload->>'move_type','')), '');
+  v_mdate_t text := nullif(btrim(coalesce(p_payload->>'move_date','')), '');
+  v_mdate   date;
+
+  v_customer uuid;
+  v_lead     uuid;
+begin
+  if p_payload is null or jsonb_typeof(p_payload) <> 'object' then
+    raise exception 'invalid_payload';
+  end if;
+
+  select id into v_company from public.companies where id = c_company;
+  if v_company is null then raise exception 'intake_misconfigured'; end if;
+
+  if v_key_hash !~ '^[0-9a-f]{64} then raise exception 'invalid_key_hash'; end if;
+  if v_payload_hash !~ '^[0-9a-f]{64} then raise exception 'invalid_payload_hash'; end if;
+
+  if v_first = '' or char_length(v_first) > 80 then raise exception 'invalid_first_name'; end if;
+  if v_last  = '' or char_length(v_last)  > 80 then raise exception 'invalid_last_name'; end if;
+
+  if v_email is not null then
+    if char_length(v_email) > 160 or v_email !~ '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+ then
+      raise exception 'invalid_email';
+    end if;
+  end if;
+
+  if v_phone is not null then
+    if char_length(v_phone) > 40
+       or v_phone !~ '^[+0-9 ().-]+
+       or char_length(regexp_replace(v_phone,'[^0-9]','','g')) not between 7 and 15 then
+      raise exception 'invalid_phone';
+    end if;
+  end if;
+
+  if v_email is null and v_phone is null then raise exception 'missing_contact'; end if;
+
+  if v_origin is not null and char_length(v_origin) > 200 then raise exception 'invalid_origin'; end if;
+  if v_dest   is not null and char_length(v_dest)   > 200 then raise exception 'invalid_destination'; end if;
+  if v_notes  is not null and char_length(v_notes)  > 4000 then raise exception 'invalid_notes'; end if;
+  if v_cnotes is not null and char_length(v_cnotes) > 2000 then raise exception 'invalid_customer_notes'; end if;
+
+  if v_mtype is not null and not (v_mtype = any(c_move_types)) then
+    raise exception 'invalid_move_type';
+  end if;
+
+  if v_mdate_t is not null then
+    if v_mdate_t !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2} then raise exception 'invalid_move_date'; end if;
+    v_mdate := v_mdate_t::date;
+    if v_mdate < current_date or v_mdate > (current_date + interval '2 years')::date then
+      raise exception 'move_date_out_of_range';
+    end if;
+  end if;
+
+  insert into public.public_intake_idempotency (key_hash, payload_hash)
+  values (v_key_hash, v_payload_hash)
+  on conflict (key_hash) do nothing
+  returning key_hash into v_claimed;
+
+  if v_claimed is null then
+    select payload_hash into v_existing_ph
+      from public.public_intake_idempotency where key_hash = v_key_hash;
+    if v_existing_ph = v_payload_hash then
+      return jsonb_build_object('status', 'duplicate');
+    else
+      raise exception 'idempotency_conflict';
+    end if;
+  end if;
+
+  insert into public.customers (company_id, created_by, first_name, last_name, email, phone, notes)
+  values (v_company, null, v_first, v_last, v_email, v_phone, v_cnotes)
+  returning id into v_customer;
+
+  insert into public.leads (
+    company_id, created_by, customer_id, status, source, move_date,
+    origin_address, destination_address, notes
+  )
+  values (
+    v_company, null, v_customer, 'new'::public.lead_status, 'website',
+    v_mdate, v_origin, v_dest, v_notes
+  )
+  returning id into v_lead;
+
+  insert into public.activity_log (
+    company_id, actor_id, actor_email, actor_role, action,
+    entity_type, entity_id, summary, metadata
+  )
+  values (
+    v_company, null, null, 'public', 'lead.public_intake',
+    'lead', v_lead::text, 'Website estimate request received',
+    jsonb_build_object(
+      'source', 'website',
+      'has_email', (v_email is not null),
+      'has_phone', (v_phone is not null),
+      'move_type', v_mtype,
+      'utm_source',   left(nullif(btrim(coalesce(p_payload->>'utm_source','')),''),120),
+      'utm_medium',   left(nullif(btrim(coalesce(p_payload->>'utm_medium','')),''),120),
+      'utm_campaign', left(nullif(btrim(coalesce(p_payload->>'utm_campaign','')),''),120)
+    )
+  );
+
+  return jsonb_build_object('status', 'created');
+end;
+$function$
+;
 commit;
