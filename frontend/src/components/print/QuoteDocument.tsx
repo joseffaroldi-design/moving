@@ -69,12 +69,19 @@ export function QuoteDocument({ quote }: { quote: Quote }) {
         </div>
         <div className="rounded-md bg-cream-100 p-4">
           <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-gold-hover">Service details</p>
-          {quote.service_type && <Line label="Service" value={String(quote.service_type)} />}
-          <Line label="Move date" value={formatDate(quote.move_date as string)} />
-          <Line label="Origin" value={addr(quote as Record<string, unknown>, "origin")} />
-          <Line label="Destination" value={addr(quote as Record<string, unknown>, "destination")} />
+          {quote.service_type && <Line label="Service" value={quote.service_type === "junk_removal" ? "Junk Removal" : quote.service_type === "moving" ? "Moving" : String(quote.service_type)} />}
+          <Line label="Preferred date" value={formatDate((quote.service_date ?? quote.move_date) as string)} />
+          <Line label="Pickup / service" value={addr(quote as Record<string, unknown>, "origin")} />
+          {(quote.service_type !== "junk_removal" || quote.destination_address) && <Line label="Destination" value={addr(quote as Record<string, unknown>, "destination")} />}
         </div>
       </div>
+
+      {(quote.access_details || quote.service_notes) && (
+        <div className="mt-4 space-y-3 break-words">
+          {quote.access_details && <div><p className="text-[11px] font-semibold uppercase tracking-wider text-gold-hover">Access requirements</p><p className="whitespace-pre-wrap text-[13px] text-slate-700">{String(quote.access_details)}</p></div>}
+          {quote.service_notes && <div><p className="text-[11px] font-semibold uppercase tracking-wider text-gold-hover">Service details / inventory</p><p className="whitespace-pre-wrap text-[13px] text-slate-700">{String(quote.service_notes)}</p></div>}
+        </div>
+      )}
 
       {/* Charges */}
       <div className="mt-6">
