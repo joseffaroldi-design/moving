@@ -49,7 +49,14 @@ export default async function QuotePrintPage({
           };
         }
       }
-      quote = { ...leadDetails, ...(q as Record<string, unknown>), quote_line_items: items ?? [] } as unknown as Quote;
+      quote = {
+        ...leadDetails,
+        ...(q as Record<string, unknown>),
+        move_date: q.service_date ?? leadDetails.move_date ?? null,
+        origin_address: q.origin_address ?? leadDetails.origin_address ?? null,
+        destination_address: q.destination_address ?? leadDetails.destination_address ?? null,
+        quote_line_items: items ?? [],
+      } as unknown as Quote;
     }
   } catch {
     quote = undefined;
