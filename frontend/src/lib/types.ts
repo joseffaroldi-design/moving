@@ -57,6 +57,13 @@ export interface Quote {
   hourly_rate?: number | string;
   estimated_hours?: number | string;
   crew_size?: number;
+  service_type?: "moving" | "junk_removal" | string;
+  service_date?: string | null;
+  move_date?: string | null;
+  origin_address?: string | null;
+  destination_address?: string | null;
+  access_details?: string | null;
+  service_notes?: string | null;
   travel_fee?: number | string;
   packing_fee?: number | string;
   materials_fee?: number | string;

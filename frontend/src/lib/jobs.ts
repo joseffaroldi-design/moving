@@ -9,6 +9,7 @@ import { getBrowserClient } from "@/lib/supabase/client";
 
 export const JOB_STATUSES = [
   "scheduled",
+  "confirmed",
   "in_progress",
   "completed",
   "cancelled",
@@ -36,10 +37,11 @@ export interface JobRecord {
   customer_id: string | null;
   status: string;
   job_number: string;
-  scheduled_start: string;
+  scheduled_start: string | null;
   scheduled_end: string | null;
-  origin_address: string;
-  destination_address: string;
+  origin_address: string | null;
+  destination_address: string | null;
+  service_type?: "moving" | "junk_removal";
   crew_size: number | null;
   truck_count: number | null;
   dispatch_notes: string | null;
@@ -102,6 +104,29 @@ export async function convertQuoteToJob(
   });
   if (error) throw new Error(error.message);
   return data as ConvertQuoteToJobResult;
+}
+
+// Complete scheduling after a customer's quote approval created the job.
+export async function scheduleConfirmedJob(input: {
+  job_id: string;
+  scheduled_start: string;
+  origin_address: string;
+  destination_address?: string | null;
+  scheduled_end?: string | null;
+  crew_size?: number | null;
+  truck_count?: number | null;
+}): Promise<{ job_id: string; status: string }> {
+  const { data, error } = await getBrowserClient().rpc("schedule_confirmed_job", {
+    p_job_id: input.job_id,
+    p_scheduled_start: input.scheduled_start,
+    p_origin_address: input.origin_address,
+    p_destination_address: input.destination_address ?? null,
+    p_scheduled_end: input.scheduled_end ?? null,
+    p_crew_size: input.crew_size ?? null,
+    p_truck_count: input.truck_count ?? null,
+  });
+  if (error) throw new Error(error.message);
+  return data as { job_id: string; status: string };
 }
 
 // ---------------------------------------------------------------------------

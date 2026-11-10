@@ -69,6 +69,12 @@ export interface PortalQuoteListItem {
 }
 
 export interface PortalQuoteDetail {
+  service_type?: "moving" | "junk_removal";
+  service_date?: string | null;
+  origin_address?: string | null;
+  destination_address?: string | null;
+  access_details?: string | null;
+  service_notes?: string | null;
   id: string;
   quote_number: string;
   status: string;

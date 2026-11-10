@@ -1,4 +1,10 @@
 @tailwind base;
+
+:root {
+  --font-playfair: 'Playfair Display Variable';
+  --font-chivo: 'Chivo Variable';
+  --font-plex: 'IBM Plex Sans Variable';
+}
 @tailwind components;
 @tailwind utilities;
 

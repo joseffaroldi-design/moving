@@ -29,7 +29,34 @@ export default async function QuotePrintPage({
         .select("*")
         .eq("quote_id", id)
         .order("sort_order", { ascending: true });
-      quote = { ...(q as Record<string, unknown>), quote_line_items: items ?? [] } as unknown as Quote;
+      // Show the move/service details saved with the linked lead on the PDF.
+      // RLS governs both reads; do not expose private lead notes on the document.
+      let leadDetails: Record<string, unknown> = {};
+      if (q.lead_id) {
+        const { data: linkedLead } = await supabase
+          .from("leads")
+          .select("move_date, origin_address, destination_address, notes")
+          .eq("id", q.lead_id)
+          .eq("company_id", q.company_id)
+          .maybeSingle();
+        if (linkedLead) {
+          const service = String(linkedLead.notes ?? "").match(/^(?:Service type|Move type):\s*(Moving|Junk Removal)\s*$/m);
+          leadDetails = {
+            move_date: linkedLead.move_date,
+            origin_address: linkedLead.origin_address,
+            destination_address: linkedLead.destination_address,
+            service_type: service?.[1] ?? "Moving",
+          };
+        }
+      }
+      quote = {
+        ...leadDetails,
+        ...(q as Record<string, unknown>),
+        move_date: q.service_date ?? leadDetails.move_date ?? null,
+        origin_address: q.origin_address ?? leadDetails.origin_address ?? null,
+        destination_address: q.destination_address ?? leadDetails.destination_address ?? null,
+        quote_line_items: items ?? [],
+      } as unknown as Quote;
     }
   } catch {
     quote = undefined;
