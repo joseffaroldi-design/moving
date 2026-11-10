@@ -16,7 +16,7 @@ export function formatDate(value: string | Date | null | undefined): string {
   // Postgres date-only values are calendar dates, not UTC instants.
   // Parsing YYYY-MM-DD as UTC would display the previous day in Louisiana.
   const d = typeof value === "string"
-    ? /^\\d{4}-\\d{2}-\\d{2}$/.test(value)
+    ? /^\d{4}-\d{2}-\d{2}$/.test(value)
       ? new Date(value + "T12:00:00")
       : new Date(value)
     : value;
