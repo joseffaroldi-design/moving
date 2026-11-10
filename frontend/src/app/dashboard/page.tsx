@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+
 import Link from "next/link";
 import {
   Users,
@@ -15,6 +17,8 @@ import {
   Circle,
 } from "lucide-react";
 import { useDashboardData } from "@/components/data/DashboardProvider";
+import { useAuth } from "@/components/auth/AuthProvider";
+import { fetchJobs } from "@/lib/jobs";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatCard, Card, CardHeader } from "@/components/ui/card";
 import { StatCardSkeleton, Skeleton } from "@/components/ui/skeleton";
@@ -29,6 +33,17 @@ import { UnpaidInvoicesCard } from "@/components/invoices/UnpaidInvoicesCard";
 
 export default function DashboardPage() {
   const { data, loading, error, refetch } = useDashboardData();
+  const { me } = useAuth();
+  const companyId = (me?.profile as { company_id?: string } | null)?.company_id;
+  const [unscheduledJobs,setUnscheduledJobs] = useState<number | null>(null);
+  useEffect(() => {
+    let active = true;
+    if (!companyId) { setUnscheduledJobs(null); return; }
+    fetchJobs(companyId)
+      .then(jobs => { if (active) setUnscheduledJobs(jobs.filter(j => !j.scheduled_start && j.status !== "cancelled").length); })
+      .catch(() => { if (active) setUnscheduledJobs(null); });
+    return () => { active = false; };
+  }, [companyId]);
 
   const recentQuoteValue = (data?.recentQuotes ?? []).reduce(
     (sum, q) => sum + (Number(q.total ?? q.subtotal) || 0),
@@ -42,6 +57,13 @@ export default function DashboardPage() {
         description="Your live operational snapshot."
         breadcrumbs={[{ label: "Operations" }, { label: "Dashboard" }]}
       />
+
+      {unscheduledJobs !== null && unscheduledJobs > 0 && (
+        <Link href="/dashboard/jobs" data-testid="unscheduled-jobs-alert" className="mb-5 flex items-center justify-between gap-3 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 hover:bg-amber-100">
+          <span><strong>{unscheduledJobs} accepted {unscheduledJobs === 1 ? "job needs" : "jobs need"} scheduling.</strong> Confirm an exact date and time before dispatch.</span>
+          <span className="shrink-0 font-semibold">View jobs →</span>
+        </Link>
+      )}
 
       <div className="mb-6 flex items-center gap-4 overflow-hidden rounded-md border border-navy-800 bg-navy px-5 py-4">
         <CrescentMark className="hidden h-11 w-11 shrink-0 sm:block" />
