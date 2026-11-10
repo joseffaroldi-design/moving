@@ -4,7 +4,7 @@ select
   current_database() as database_name,
   (select count(*) from information_schema.tables where table_schema='public' and table_name in ('quotes','jobs','leads','customers','quote_approval_tokens')) = 5 as core_tables_exist,
   to_regprocedure('public.create_quote_with_crew(uuid,uuid,numeric,numeric,numeric,numeric,numeric,numeric,numeric,numeric,timestamp with time zone,jsonb,integer)') is not null as crew_quote_rpc_exists,
-  to_regprocedure('public.update_draft_quote_with_crew(uuid,numeric,numeric,numeric,numeric,numeric,numeric,numeric,timestamp with time zone,jsonb,integer)') is not null as crew_edit_rpc_exists,
+  to_regprocedure('public.update_draft_quote_with_crew(uuid,numeric,numeric,numeric,numeric,numeric,numeric,numeric,numeric,timestamp with time zone,jsonb,integer)') is not null as crew_edit_rpc_exists,
   to_regprocedure('public.respond_to_quote_approval(text,text)') is not null as approval_rpc_exists,
   to_regprocedure('public.portal_approve_quote(uuid)') is not null as portal_approval_rpc_exists,
   to_regprocedure('public.convert_quote_to_job(uuid,timestamp with time zone,text,text,timestamp with time zone,integer,integer,text)') is not null as legacy_job_conversion_exists,
