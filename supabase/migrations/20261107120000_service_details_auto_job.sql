@@ -112,8 +112,8 @@ begin
   perform public.set_draft_quote_details(p_quote_id,p_details);
   return v_result;
 end; $$;
-revoke all on function public.update_draft_quote_with_service(uuid,numeric,numeric,numeric,numeric,numeric,numeric,numeric,timestamptz,jsonb,integer,jsonb) from public,anon,service_role;
-grant execute on function public.update_draft_quote_with_service(uuid,numeric,numeric,numeric,numeric,numeric,numeric,timestamptz,jsonb,integer,jsonb) to authenticated;
+revoke all on function public.update_draft_quote_with_service(uuid,numeric,numeric,numeric,numeric,numeric,numeric,numeric,numeric,timestamptz,jsonb,integer,jsonb) from public,anon,service_role;
+grant execute on function public.update_draft_quote_with_service(uuid,numeric,numeric,numeric,numeric,numeric,numeric,numeric,numeric,timestamptz,jsonb,integer,jsonb) to authenticated;
 
 -- Public customer acceptance already validates bearer token and expiry.
 -- Trigger applies to ALL accepted quote paths, including portal acceptance.
