@@ -285,7 +285,7 @@ $function$
 
 -- Copy service and PDF details when staff duplicates an existing quote.
 create or replace function public.duplicate_quote_with_service(p_quote_id uuid)
-returns json language plpgsql security definer set search_path = public, pg_temp as $
+returns json language plpgsql security definer set search_path = public, pg_temp as $$
 declare v_company uuid := public._require_quote_mutator(); v_src public.quotes%rowtype; v_result json;
 begin
   select * into v_src from public.quotes where id=p_quote_id;
@@ -296,20 +296,20 @@ begin
       'origin_address',v_src.origin_address,'destination_address',v_src.destination_address,
       'access_details',v_src.access_details,'service_notes',v_src.service_notes));
   return v_result;
-end; $;
+end; $$;
 revoke all on function public.duplicate_quote_with_service(uuid) from public,anon,service_role;
 grant execute on function public.duplicate_quote_with_service(uuid) to authenticated;
 
 -- The separate job-status RPC must not start an unscheduled job.
 create or replace function public._guard_unscheduled_job_progress()
-returns trigger language plpgsql set search_path=public,pg_temp as $
+returns trigger language plpgsql set search_path=public,pg_temp as $$
 begin
  if new.status::text in ('in_progress','completed')
     and (new.scheduled_start is null or nullif(btrim(coalesce(new.origin_address,'')),'') is null) then
    raise exception 'Schedule the job and confirm the pickup location before starting work';
  end if;
  return new;
-end; $;
+end; $$;
 drop trigger if exists guard_unscheduled_job_progress on public.jobs;
 create trigger guard_unscheduled_job_progress
 before update of status on public.jobs
@@ -356,21 +356,21 @@ begin
   select id into v_company from public.companies where id = c_company;
   if v_company is null then raise exception 'intake_misconfigured'; end if;
 
-  if v_key_hash !~ '^[0-9a-f]{64} then raise exception 'invalid_key_hash'; end if;
-  if v_payload_hash !~ '^[0-9a-f]{64} then raise exception 'invalid_payload_hash'; end if;
+  if v_key_hash !~ '^[0-9a-f]{64}$' then raise exception 'invalid_key_hash'; end if;
+  if v_payload_hash !~ '^[0-9a-f]{64}$' then raise exception 'invalid_payload_hash'; end if;
 
   if v_first = '' or char_length(v_first) > 80 then raise exception 'invalid_first_name'; end if;
   if v_last  = '' or char_length(v_last)  > 80 then raise exception 'invalid_last_name'; end if;
 
   if v_email is not null then
-    if char_length(v_email) > 160 or v_email !~ '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+ then
+    if char_length(v_email) > 160 or v_email !~ '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$' then
       raise exception 'invalid_email';
     end if;
   end if;
 
   if v_phone is not null then
     if char_length(v_phone) > 40
-       or v_phone !~ '^[+0-9 ().-]+
+       or v_phone !~ '^[+0-9 ().-]+$'
        or char_length(regexp_replace(v_phone,'[^0-9]','','g')) not between 7 and 15 then
       raise exception 'invalid_phone';
     end if;
@@ -388,7 +388,7 @@ begin
   end if;
 
   if v_mdate_t is not null then
-    if v_mdate_t !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2} then raise exception 'invalid_move_date'; end if;
+    if v_mdate_t !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' then raise exception 'invalid_move_date'; end if;
     v_mdate := v_mdate_t::date;
     if v_mdate < current_date or v_mdate > (current_date + interval '2 years')::date then
       raise exception 'move_date_out_of_range';
